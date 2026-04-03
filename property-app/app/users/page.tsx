@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useStore } from '../../store/useStore';
-import { getAllUsers, createUserDoc, updateDoc, doc } from '../../lib/db-users';
+import { getAllUsers, createUserDoc, updateUserDoc, deleteUserDoc } from '../../lib/db-users'
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase';
-import { updateDoc as fbUpdateDoc, doc as fbDoc } from 'firebase/firestore';
+import { updateUserDoc as fbUpdateDoc, doc as fbDoc } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import type { AppUser } from '../../types';
