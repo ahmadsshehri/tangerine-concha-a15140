@@ -549,6 +549,8 @@ onAuthStateChanged(auth, async user => {
     }catch(e){
       console.error('Auth error:',e);
       showLoad(false);
+      const btn=document.getElementById('li-btn');
+      if(btn){btn.textContent='تسجيل الدخول';btn.disabled=false;}
       const el=document.getElementById('li-err');
       if(el) el.textContent='❌ خطأ في الاتصال: '+e.message;
     }
@@ -562,25 +564,33 @@ onAuthStateChanged(auth, async user => {
 });
 
 function boot(){
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('main-nav').style.display='flex';
-  document.getElementById('nav-name').textContent=CNAME;
-  const rb=document.getElementById('nav-role');
-  if(CROLE==='admin'){rb.textContent='مدير';rb.className='role-badge role-admin';document.getElementById('admin-nav-btn').style.display='';}
-  else{rb.textContent='مشرف';rb.className='role-badge role-supervisor';}
-  document.getElementById('entry-uname').textContent=CNAME;
-  const today=new Date().toISOString().split('T')[0];
-  document.getElementById('e-date').value=today;
-  document.getElementById('v-date').value=today;
-  updateDateInfo(today);
-  document.getElementById('e-date').addEventListener('change',e=>{updateDateInfo(e.target.value);renderSavedWings();});
-  buildMasandaGrid(); buildQForms(); buildProgTable(); buildQMasandaGrid();
-  const wfm=document.getElementById('wf-masanda');
-  if(wfm){wfm.innerHTML='<option value="">— اختر المساندة —</option>'+MASANDAT.map((m,i)=>`<option value="${i}">${m.name}</option>`).join('');}
-  // non-blocking background loads
-  Promise.all([renderSavedWings(),renderDaily()]).catch(()=>{});
-  showLoad(false);
-  goPage('entry');
+  try{
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('main-nav').style.display='flex';
+    document.getElementById('nav-name').textContent=CNAME;
+    const rb=document.getElementById('nav-role');
+    if(CROLE==='admin'){rb.textContent='مدير';rb.className='role-badge role-admin';document.getElementById('admin-nav-btn').style.display='';}
+    else{rb.textContent='مشرف';rb.className='role-badge role-supervisor';}
+    document.getElementById('entry-uname').textContent=CNAME;
+    const today=new Date().toISOString().split('T')[0];
+    document.getElementById('e-date').value=today;
+    document.getElementById('v-date').value=today;
+    updateDateInfo(today);
+    document.getElementById('e-date').addEventListener('change',e=>{updateDateInfo(e.target.value);renderSavedWings();});
+    buildMasandaGrid(); buildQForms(); buildProgTable(); buildQMasandaGrid();
+    const wfm=document.getElementById('wf-masanda');
+    if(wfm){wfm.innerHTML='<option value="">— اختر المساندة —</option>'+MASANDAT.map((m,i)=>`<option value="${i}">${m.name}</option>`).join('');}
+    Promise.all([renderSavedWings(),renderDaily()]).catch(()=>{});
+    showLoad(false);
+    goPage('entry');
+  }catch(e){
+    console.error('Boot error:',e);
+    showLoad(false);
+    // force show app even if something failed
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('main-nav').style.display='flex';
+    document.getElementById('page-entry').classList.add('active');
+  }
 }
 
 window.doLogin=async()=>{
@@ -588,12 +598,20 @@ window.doLogin=async()=>{
   const pass=document.getElementById('li-pass').value;
   const err=document.getElementById('li-err');
   const btn=document.getElementById('li-btn');
+  if(!email||!pass){err.textContent='❌ أدخل البريد وكلمة المرور';return;}
   err.textContent=''; btn.textContent='جاري...'; btn.disabled=true;
-  try{ await signInWithEmailAndPassword(auth,email,pass); }
-  catch(e){
+  try{
+    await signInWithEmailAndPassword(auth,email,pass);
+  }catch(e){
     btn.textContent='تسجيل الدخول'; btn.disabled=false;
-    err.textContent=e.code==='auth/invalid-credential'||e.code==='auth/user-not-found'||e.code==='auth/wrong-password'
-      ?'❌ البريد الإلكتروني أو كلمة المرور غير صحيحة':'❌ '+e.message;
+    const c=e.code||'';
+    if(c.includes('invalid-credential')||c.includes('user-not-found')||c.includes('wrong-password')||c.includes('invalid-email')){
+      err.textContent='❌ البريد أو كلمة المرور غير صحيحة';
+    } else if(c.includes('network')||c.includes('timeout')){
+      err.textContent='❌ خطأ في الاتصال';
+    } else {
+      err.textContent='❌ '+e.message;
+    }
   }
 };
 
