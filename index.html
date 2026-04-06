@@ -1306,8 +1306,7 @@ window.printReport=()=>{
     <div class="print-header">
       <div class="ph-right">
         <div class="ph-title">📊 التقرير اليومي — الفترة المسائية</div>
-        <div class="ph-sub">المديرية العامة للسجون — مكة المكرمة</div>
-        <div class="ph-badge">المركز المتخصص للتأهيل</div>
+        <div class="ph-badge">المراكز التأهيلية التخصصية</div>
       </div>
       <div class="ph-left">
         <div>📅 ${DAR2[d.getDay()]} | ${date}</div>
@@ -1370,15 +1369,6 @@ window.printReport=()=>{
       </div>
     </div>
 
-    <!-- BARS -->
-    <div class="bars-box no-break">
-      <div class="bars-title">مقارنة درجات الأجنحة</div>
-      ${wings.map(w=>{const pct=(w.totalScore/60)*100;return`<div class="bar-row">
-        <div class="bar-lbl">جناح ${w.wing}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${barC(pct)}"></div></div>
-        <div class="bar-val">${w.totalScore}/60</div>
-      </div>`;}).join('')}
-    </div>
 
     <!-- NOTES -->
     ${['amni','fanni','baramij'].some(k=>wings.some(w=>w.obs?.[k]))?`
@@ -1396,7 +1386,7 @@ window.printReport=()=>{
     <!-- FOOTER -->
     <div class="print-footer">
       <span>📅 تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')} — ${new Date().toLocaleTimeString('ar-SA')}</span>
-      <span>المركز المتخصص للتأهيل | المديرية العامة للسجون</span>
+      <span>المراكز التأهيلية التخصصية</span>
     </div>
 
     <script>window.onload=()=>setTimeout(()=>window.print(),600);<\/script>
