@@ -1265,10 +1265,44 @@ window.printReport=()=>{
   .bar-val{font-size:10px;font-weight:700;min-width:28px;color:#1e2533;}
 
   /* NOTES */
-  .notes-box{background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:10px 12px;margin-bottom:8px;}
-  .note-hdr{font-size:10px;font-weight:800;color:#b45309;margin-bottom:5px;}
-  .note-row{display:grid;grid-template-columns:70px 80px 1fr;gap:6px;font-size:10px;padding:3px 0;border-bottom:1px solid #fef3c7;}
-  .note-row:last-child{border-bottom:none;}
+/* NOTES */
+.notes-box{border-radius:8px;padding:10px 12px;margin-bottom:8px;}
+.note-hdr{font-size:10px;font-weight:800;margin-bottom:5px;}
+.note-row{display:grid;grid-template-columns:70px 80px 1fr;gap:6px;font-size:10px;padding:3px 0;}
+.note-row:last-child{border-bottom:none;}
+
+.notes-box.notes-red{
+  background:#fde8e8;
+  border:1px solid #f5a3a3;
+}
+.notes-box.notes-red .note-hdr{
+  color:#c81e1e;
+}
+.notes-box.notes-red .note-row{
+  border-bottom:1px solid #f8caca;
+}
+
+.notes-box.notes-yellow{
+  background:#fef3c7;
+  border:1px solid #fbbf24;
+}
+.notes-box.notes-yellow .note-hdr{
+  color:#b45309;
+}
+.notes-box.notes-yellow .note-row{
+  border-bottom:1px solid #fde68a;
+}
+
+.notes-box.notes-green{
+  background:#e3f9ee;
+  border:1px solid #86d7b0;
+}
+.notes-box.notes-green .note-hdr{
+  color:#057a55;
+}
+.notes-box.notes-green .note-row{
+  border-bottom:1px solid #bfead3;
+}
 
   /* FOOTER */
   .print-footer{border-top:2px solid #e2e6ed;margin-top:14px;padding:8px 4px 0;display:flex;justify-content:space-between;font-size:9px;color:#9aa3b0;}
@@ -1370,18 +1404,31 @@ window.printReport=()=>{
     </div>
 
 
-    <!-- NOTES -->
-    ${['amni','fanni','baramij'].some(k=>wings.some(w=>w.obs?.[k]))?`
-    <div class="sec no-break">
-      <div class="sec-title">📝 رابعاً: الملاحظات المرصودة</div>
-      ${['amni','fanni','baramij'].map((k,i)=>{
-        const rows=wings.filter(w=>w.obs?.[k]);
-        const icons=['🛡️ أمني','🔧 فني','📚 برامج'];
-        if(!rows.length)return '';
-        return `<div class="notes-box"><div class="note-hdr">${icons[i]}</div>
-          ${rows.map(w=>`<div class="note-row"><span><strong>جناح ${w.wing}</strong></span><span>${w.masandaName}</span><span>${w.obs[k]}</span></div>`).join('')}
-        </div>`;}).join('')}
-    </div>`:''}
+   <!-- NOTES -->
+${['amni','fanni','baramij'].some(k => wings.some(w => w.obs?.[k])) ? `
+<div class="sec no-break">
+  <div class="sec-title">📝 رابعاً: الملاحظات المرصودة</div>
+  ${[
+    { key:'amni', label:'🛡️ أمني', cls:'notes-red' },
+    { key:'fanni', label:'🔧 فني', cls:'notes-yellow' },
+    { key:'baramij', label:'📚 برامج', cls:'notes-green' }
+  ].map(item => {
+    const rows = wings.filter(w => w.obs?.[item.key]);
+    if (!rows.length) return '';
+    return `
+      <div class="notes-box ${item.cls}">
+        <div class="note-hdr">${item.label}</div>
+        ${rows.map(w => `
+          <div class="note-row">
+            <span><strong>جناح ${w.wing}</strong></span>
+            <span>${w.masandaName}</span>
+            <span>${w.obs[item.key]}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }).join('')}
+</div>` : ''}
 
     <!-- FOOTER -->
     <div class="print-footer">
