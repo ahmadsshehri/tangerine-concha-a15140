@@ -63,6 +63,7 @@ function ExportBar({ onPrint, onExcel, count }) {
 
 const ALL_REPORT_TABS = [
   { id: 'daily',      label: '📊 التقرير اليومي',   perm: 'reports_daily'       },
+  { id: 'wing',       label: '🏠 تقرير الجناح',     perm: 'supervisor_reports'  },
   { id: 'supervisor', label: '🌙 ملاحظات المشرفين', perm: 'supervisor_reports'  },
   { id: 'caretaker',  label: '📋 تقارير القيّمين',  perm: 'caretaker_reports'   },
   { id: 'needs',      label: '📏 الاحتياج',          perm: 'custody_reports'     },
@@ -93,6 +94,7 @@ export default function ReportsPage() {
         ))}
       </div>
       {activeTab === 'daily'      && <DailyReport />}
+      {activeTab === 'wing'       && <WingReport />}
       {activeTab === 'supervisor' && <SupervisorReport />}
       {activeTab === 'caretaker'  && <CaretakerReport />}
       {activeTab === 'needs'      && <NeedsReport />}
@@ -984,6 +986,306 @@ function CaretakerReport() {
           <div className="es-icon">📭</div>
           <div className="es-title">لا توجد بيانات في هذه الفترة</div>
         </div>
+      )}
+    </div>
+  )
+}
+
+
+// ─── تقرير جناح محدد خلال فترة ───────────────────────────────────────────────
+function WingReport() {
+  const toast = useToast()
+  const [from,       setFrom]       = useState('')
+  const [to,         setTo]         = useState('')
+  const [selMasanda, setSelMasanda] = useState('')
+  const [selWing,    setSelWing]    = useState('')
+  const [data,       setData]       = useState([])   // array of wing records sorted by date
+  const [loading,    setLoading]    = useState(false)
+
+  const wingOptions = selMasanda
+    ? MASANDAT.find(m => m.id === selMasanda)?.wings || []
+    : []
+
+  const load = async () => {
+    if (!from || !to)              { toast('⚠️ حدد الفترة الزمنية', 'warn'); return }
+    if (!selMasanda || !selWing)   { toast('⚠️ اختر المساندة والجناح', 'warn'); return }
+    setLoading(true)
+    try {
+      const snap = await getDocs(collection(db, 'wings'))
+      let recs = snap.docs.map(d => d.data())
+      recs = recs.filter(w =>
+        w.masandaId === selMasanda &&
+        String(w.wing) === String(selWing) &&
+        w.date >= from && w.date <= to
+      )
+      recs.sort((a, b) => a.date > b.date ? 1 : -1)
+      setData(recs)
+    } catch (e) { toast('❌ ' + e.message, 'error') }
+    setLoading(false)
+  }
+
+  const m        = MASANDAT.find(m => m.id === selMasanda)
+  const wLabel   = selWing ? (isNaN(selWing) ? selWing : `جناح ${selWing}`) : ''
+  const sc       = v => v >= 50 ? '#057a55' : v >= 35 ? '#b45309' : '#c81e1e'
+  const bg       = v => v >= 50 ? '#e3f9ee' : v >= 35 ? '#fef3c7' : '#fde8e8'
+  const avgScore = data.length ? Math.round(data.reduce((s,w) => s+w.totalScore,0)/data.length) : 0
+  const maxScore = data.length ? Math.max(...data.map(w=>w.totalScore)) : 0
+  const minScore = data.length ? Math.min(...data.map(w=>w.totalScore)) : 0
+
+  // الطباعة
+  const doPrint = () => {
+    if (!data.length) { toast('⚠️ لا توجد بيانات', 'warn'); return }
+    const rows = data.map(w => `<tr>
+      <td>${w.date}</td>
+      ${w.axes.map(a=>`<td style="text-align:center">${a.total}/15</td>`).join('')}
+      <td><span style="font-weight:800;color:${sc((w.totalScore/60)*100)}">${w.totalScore}/60</span></td>
+      <td>${w.beneficiaries||'—'}</td>
+      <td style="color:#c81e1e">${w.violations||0}</td>
+      <td style="font-size:10px;color:#5f6b7e">${w.savedBy||'—'}</td>
+    </tr>`).join('')
+
+    const obsRows = ['amni','fanni','baramij'].flatMap(k => {
+      const label = k==='amni'?'🛡️ أمني':k==='fanni'?'🔧 فني':'📚 برامج'
+      const color = k==='amni'?'#c81e1e':k==='fanni'?'#b45309':'#057a55'
+      return data.filter(w=>w.obs?.[k]).map(w=>
+        `<tr><td>${w.date}</td><td style="font-weight:700;color:${color}">${label}</td><td>${w.obs[k]}</td></tr>`
+      )
+    }).join('')
+
+    const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Cairo',sans-serif;background:#fff;color:#1e2533;direction:rtl;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.hdr{background:linear-gradient(135deg,#1e3a8a,#1a56db);color:#fff;padding:16px 24px;display:flex;justify-content:space-between;margin-bottom:14px;}
+.hdr-title{font-size:17px;font-weight:900;} .hdr-sub{font-size:11px;opacity:.8;margin-top:3px;}
+.hdr-right{text-align:left;font-size:11px;opacity:.85;line-height:1.8;}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;}
+.st{border-radius:8px;padding:10px 12px;text-align:center;}
+.st-val{font-size:22px;font-weight:900;} .st-lbl{font-size:10px;color:#5f6b7e;font-weight:700;margin-top:3px;}
+.sec-title{font-size:11px;font-weight:800;color:#1a56db;padding:6px 10px;background:#ebf0fd;border-right:4px solid #1a56db;border-radius:0 6px 6px 0;margin-bottom:8px;}
+table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:12px;}
+th{background:#1a56db;color:#fff;padding:6px 8px;text-align:right;font-weight:700;}
+td{padding:5px 8px;border-bottom:1px solid #e2e6ed;}
+tr:nth-child(even) td{background:#f8f9fb;}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.bar-lbl{min-width:60px;font-size:10px;color:#5f6b7e;font-weight:600;}
+.bar-track{flex:1;height:10px;background:#e2e6ed;border-radius:5px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:5px;}
+.bar-val{font-size:10px;font-weight:800;min-width:30px;}
+.footer{border-top:2px solid #e2e6ed;margin-top:12px;padding:8px 0 0;display:flex;justify-content:space-between;font-size:9px;color:#9aa3b0;}
+@media print{@page{size:A4;margin:8mm;}button{display:none!important;}}
+</style></head><body>
+<div class="hdr">
+  <div><div class="hdr-title">🏠 تقرير الجناح — ${m?.name} / ${wLabel}</div><div class="hdr-sub">الفترة: ${from} ← ${to}</div></div>
+  <div class="hdr-right"><div>📅 ${new Date().toLocaleDateString('ar-SA')}</div><div>عدد الأيام: ${data.length}</div></div>
+</div>
+<div class="stats">
+  <div class="st" style="background:#ebf0fd;border:1.5px solid #1a56db"><div class="st-val" style="color:#1a56db">${data.length}</div><div class="st-lbl">أيام مُسجَّلة</div></div>
+  <div class="st" style="background:#e3f9ee;border:1.5px solid #057a55"><div class="st-val" style="color:#057a55">${avgScore}</div><div class="st-lbl">متوسط الدرجة/60</div></div>
+  <div class="st" style="background:#fef3c7;border:1.5px solid #b45309"><div class="st-val" style="color:#b45309">${maxScore}</div><div class="st-lbl">أعلى درجة</div></div>
+  <div class="st" style="background:#fde8e8;border:1.5px solid #c81e1e"><div class="st-val" style="color:#c81e1e">${minScore}</div><div class="st-lbl">أدنى درجة</div></div>
+</div>
+
+<div class="sec-title">📊 توزيع الدرجات اليومية</div>
+${data.map(w=>{const pct=(w.totalScore/60)*100;const col=sc(pct);return`<div class="bar-row"><div class="bar-lbl">${w.date.slice(5)}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div><div class="bar-val" style="color:${col}">${w.totalScore}</div></div>`;}).join('')}
+
+<div class="sec-title" style="margin-top:12px">📋 تفصيل الأيام</div>
+<table>
+<thead><tr><th>التاريخ</th><th>الالتزام/15</th><th>السلوك/15</th><th>التفاعل/15</th><th>السكن/15</th><th>الإجمالي/60</th><th>المستفيدون</th><th>المخالفات</th><th>المدخِل</th></tr></thead>
+<tbody>${rows}</tbody></table>
+
+${obsRows ? `<div class="sec-title">📝 الملاحظات المرصودة</div>
+<table><thead><tr><th>التاريخ</th><th>النوع</th><th>الملاحظة</th></tr></thead><tbody>${obsRows}</tbody></table>` : ''}
+
+<div class="footer"><span>المراكز التأهيلية التخصصية</span><span>${new Date().toLocaleDateString('ar-SA')} — ${new Date().toLocaleTimeString('ar-SA')}</span></div>
+<script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script>
+</body></html>`
+    const w = window.open('','_blank'); w.document.write(html); w.document.close()
+  }
+
+  return (
+    <div className="animate-in">
+      {/* فلاتر */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">🏠 تقرير جناح خلال فترة</div>
+        <div className="form-row fr-3" style={{ marginBottom: 12 }}>
+          <div className="form-group">
+            <label>من تاريخ *</label>
+            <input type="date" value={from} onChange={e => setFrom(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>إلى تاريخ *</label>
+            <input type="date" value={to}   onChange={e => setTo(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>المساندة *</label>
+            <select value={selMasanda} onChange={e => { setSelMasanda(e.target.value); setSelWing('') }}>
+              <option value="">— اختر —</option>
+              {MASANDAT.map(ms => <option key={ms.id} value={ms.id}>{ms.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>الجناح *</label>
+            <select value={selWing} onChange={e => setSelWing(e.target.value)} disabled={!selMasanda}>
+              <option value="">— اختر —</option>
+              {wingOptions.map(w => <option key={w} value={w}>{isNaN(w) ? w : `جناح ${w}`}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{ justifyContent: 'flex-end' }}>
+            <label style={{ opacity: 0 }}>_</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary" onClick={load} style={{ flex: 1 }}>🔍 عرض</button>
+              <button className="btn btn-outline" onClick={doPrint} disabled={!data.length}>🖨️</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {loading && <div style={{ height: 150 }} className="skeleton" />}
+
+      {!loading && data.length === 0 && from && to && selWing && (
+        <div className="empty-state">
+          <div className="es-icon">📭</div>
+          <div className="es-title">لا توجد بيانات لهذا الجناح في الفترة المحددة</div>
+        </div>
+      )}
+
+      {!loading && data.length > 0 && (
+        <>
+          {/* إحصاءات */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:16 }}>
+            {[
+              { label:'أيام مُسجَّلة',  value:data.length, color:'#1a56db', bg:'#ebf0fd' },
+              { label:'متوسط الدرجة',   value:avgScore,    color:'#057a55', bg:'#e3f9ee' },
+              { label:'أعلى درجة',      value:maxScore,    color:'#b45309', bg:'#fef3c7' },
+              { label:'أدنى درجة',      value:minScore,    color:'#c81e1e', bg:'#fde8e8' },
+            ].map((s,i) => (
+              <div key={i} style={{ background:s.bg, border:`1.5px solid ${s.color}`, borderRadius:'var(--r)', padding:'14px', textAlign:'center' }}>
+                <div style={{ fontSize:24, fontWeight:900, color:s.color }}>{s.value}</div>
+                <div style={{ fontSize:11, color:'#5f6b7e', fontWeight:700, marginTop:3 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* ─── Chart الأعمدة ─── */}
+          {data.length > 1 && (
+            <div className="card" style={{ marginBottom:14 }}>
+              <div className="card-title">📊 مستوى الجناح خلال الفترة</div>
+              <div style={{ overflowX: 'auto' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'flex-end', gap: 6,
+                  height: 180, padding: '10px 4px 0',
+                  minWidth: data.length * 48
+                }}>
+                  {data.map((w, i) => {
+                    const pct = (w.totalScore / 60) * 100
+                    const col = sc(pct)
+                    const bgC = bg(pct)
+                    return (
+                      <div key={i} style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1, minWidth:40, gap:4 }}>
+                        {/* القيمة فوق العمود */}
+                        <div style={{ fontSize:11, fontWeight:800, color:col }}>{w.totalScore}</div>
+                        {/* العمود */}
+                        <div style={{
+                          width:'100%', borderRadius:'4px 4px 0 0',
+                          background: col,
+                          height: `${Math.max(6, pct * 1.4)}px`,
+                          transition: 'height .4s ease',
+                          position: 'relative', cursor: 'default',
+                          minHeight: 6,
+                        }}
+                          title={`${w.date}: ${w.totalScore}/60`}
+                        />
+                        {/* التاريخ */}
+                        <div style={{ fontSize:9.5, color:'var(--text-muted)', transform:'rotate(-35deg)', transformOrigin:'top center', whiteSpace:'nowrap', marginTop:8 }}>
+                          {w.date.slice(5)}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* مستوى 60 */}
+                <div style={{ display:'flex', gap:12, marginTop:20, paddingTop:8, borderTop:'1px solid var(--border)', justifyContent:'center', flexWrap:'wrap' }}>
+                  {[{color:'#057a55',label:'ممتاز (50+)'},{color:'#b45309',label:'متوسط (35-49)'},{color:'#c81e1e',label:'يحتاج متابعة (-35)'}].map((x,i)=>(
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:5, fontSize:11 }}>
+                      <div style={{ width:12, height:12, borderRadius:3, background:x.color }} />
+                      <span style={{ color:'var(--text-muted)' }}>{x.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* جدول التفصيل */}
+          <div className="card" style={{ marginBottom:14 }}>
+            <div className="card-title">📋 تفصيل الأيام — {m?.name} / {wLabel}</div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>التاريخ</th>
+                    {AXES.map((ax,i)=><th key={i} style={{fontSize:10}}>{ax.label.replace(/[🎯🛡️💊🏠]/g,'').trim().split(' ')[0]}/15</th>)}
+                    <th>الإجمالي/60</th>
+                    <th>مستفيدون</th>
+                    <th>مخالفات</th>
+                    <th>المدخِل</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.map((w,i) => {
+                    const pct = (w.totalScore/60)*100
+                    return (
+                      <tr key={i}>
+                        <td style={{fontWeight:700}}>{w.date}</td>
+                        {w.axes.map((a,ai)=><td key={ai} style={{textAlign:'center',fontSize:12}}>{a.total}</td>)}
+                        <td>
+                          <span style={{display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:12,fontWeight:800,background:bg(pct),color:sc(pct),border:`1px solid ${sc(pct)}`}}>
+                            {w.totalScore}/60
+                          </span>
+                        </td>
+                        <td style={{textAlign:'center',color:'#1a56db'}}>{w.beneficiaries||'—'}</td>
+                        <td style={{textAlign:'center',color:'#c81e1e'}}>{w.violations||0}</td>
+                        <td style={{fontSize:11,color:'var(--text-muted)'}}>{w.savedBy||'—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* الملاحظات */}
+          {['amni','fanni','baramij'].some(k => data.some(w=>w.obs?.[k])) && (
+            <div className="card">
+              <div className="card-title">📝 الملاحظات المرصودة خلال الفترة</div>
+              {[
+                {key:'amni',    label:'🛡️ المسار الأمني',  border:'#c81e1e', bg:'#fde8e8'},
+                {key:'fanni',   label:'🔧 المسار الفني',    border:'#b45309', bg:'#fef3c7'},
+                {key:'baramij', label:'📚 مسار البرامج',    border:'#057a55', bg:'#e3f9ee'},
+              ].map(item => {
+                const rows = data.filter(w=>w.obs?.[item.key]); if(!rows.length) return null
+                return (
+                  <div key={item.key} style={{marginBottom:12}}>
+                    <div style={{fontSize:12.5,fontWeight:800,marginBottom:7,padding:'5px 10px',background:item.bg,borderRight:`4px solid ${item.border}`,borderRadius:'0 6px 6px 0'}}>{item.label}</div>
+                    <div className="table-wrap"><table>
+                      <thead><tr><th>التاريخ</th><th>الملاحظة</th></tr></thead>
+                      <tbody>
+                        {rows.map((w,i)=>(
+                          <tr key={i}>
+                            <td style={{fontWeight:700,whiteSpace:'nowrap'}}>{w.date}</td>
+                            <td style={{fontSize:13}}>{w.obs[item.key]}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table></div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
