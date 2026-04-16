@@ -7,6 +7,7 @@ import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
 import { MASANDAT, AXES, DAR, MAR } from '../../lib/constants'
+import { EvalGuideButton } from '../../components/EvalGuideModal'  // ← إضافة جديدة
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function weekNum(d) {
@@ -23,18 +24,12 @@ function dateInfo(v) {
   }
 }
 
-// ─── Score Button ──────────────────────────────────────────────────────────────
 function ScoreBtn({ val, selected, onClick }) {
   return (
-    <button
-      className={`sb ${selected ? 'sel' : ''}`}
-      onClick={onClick}
-      type="button"
-    >{val}</button>
+    <button className={`sb ${selected ? 'sel' : ''}`} onClick={onClick} type="button">{val}</button>
   )
 }
 
-// ─── Axis Card ─────────────────────────────────────────────────────────────────
 function AxisCard({ ax, ai, scores, onChange }) {
   const total = scores.reduce((s, v) => s + v, 0)
   return (
@@ -58,7 +53,6 @@ function AxisCard({ ax, ai, scores, onChange }) {
   )
 }
 
-// ─── Main Component ────────────────────────────────────────────────────────────
 export default function SupervisorPage() {
   const { name, isAdmin, hasPerm } = useAuth()
   const toast = useToast()
@@ -71,13 +65,11 @@ export default function SupervisorPage() {
   const [loading, setLoading] = useState(false)
   const [saving,  setSaving]  = useState(false)
 
-  // Form state
   const [scores, setScores]   = useState(() => AXES.map(ax => ax.items.map(() => 0)))
   const [form,   setForm]     = useState({ ben: '', vio: '', obsAmni: '', obsFanni: '', obsBaramij: '' })
 
   const info = dateInfo(date)
 
-  // ─ Fetch saved wings for current date
   const fetchSaved = useCallback(async (d) => {
     if (!d) return
     setLoading(true)
@@ -91,13 +83,11 @@ export default function SupervisorPage() {
 
   useEffect(() => { fetchSaved(date) }, [date, fetchSaved])
 
-  // ─ Select masanda
   const pickMasanda = (idx) => {
     setSelM(idx); setSelW(null)
     resetForm()
   }
 
-  // ─ Select wing + load existing
   const pickWing = (wing) => {
     setSelW(wing)
     const m = MASANDAT[selM]
@@ -128,7 +118,6 @@ export default function SupervisorPage() {
 
   const totalScore = scores.flat().reduce((a, b) => a + b, 0)
 
-  // ─ Save
   const save = async () => {
     if (!date)         { toast('⚠️ حدد التاريخ', 'warn'); return }
     if (selM === null) { toast('⚠️ اختر المساندة', 'warn'); return }
@@ -157,7 +146,6 @@ export default function SupervisorPage() {
     setSaving(false)
   }
 
-  // ─ Delete
   const del = async (mid, wing) => {
     if (!isAdmin) { toast('❌ لا تملك صلاحية الحذف', 'error'); return }
     if (!confirm('حذف هذا الجناح نهائياً؟')) return
@@ -172,11 +160,13 @@ export default function SupervisorPage() {
 
   return (
     <div className="animate-in">
+      {/* ─ Page Header — تعديل: أضفنا زر المرجع */}
       <div className="page-header">
         <div className="page-title">
           <div className="icon" style={{ background: 'rgba(88,166,255,.15)' }}>🌙</div>
           التقييم المسائي للمشرفين
         </div>
+        <EvalGuideButton type="supervisor" />
       </div>
 
       {/* ─ Date Row */}
@@ -211,11 +201,7 @@ export default function SupervisorPage() {
           {MASANDAT.map((ms, i) => {
             const doneCount = saved.filter(s => s.masandaId === ms.id).length
             return (
-              <div
-                key={i}
-                className={`masanda-card ${selM === i ? 'active' : ''}`}
-                onClick={() => pickMasanda(i)}
-              >
+              <div key={i} className={`masanda-card ${selM === i ? 'active' : ''}`} onClick={() => pickMasanda(i)}>
                 <div className="mc-name">{ms.name}</div>
                 <div className="mc-sub">{ms.wings.length} أجنحة {doneCount > 0 && <span style={{ color: 'var(--green)' }}>✅ {doneCount}</span>}</div>
               </div>
@@ -232,8 +218,7 @@ export default function SupervisorPage() {
             {m.wings.map(w => {
               const done = saved.some(s => s.masandaId === m.id && String(s.wing) === String(w))
               return (
-                <button
-                  key={w}
+                <button key={w}
                   className={`wing-btn ${done ? 'filled' : ''} ${String(selW) === String(w) ? 'active' : ''}`}
                   onClick={() => pickWing(w)}
                 >
