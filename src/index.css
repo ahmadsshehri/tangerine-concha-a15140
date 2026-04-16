@@ -192,9 +192,46 @@ body {
 .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
 @media (max-width: 768px) {
   .grid-2,.grid-3,.grid-4 { grid-template-columns: 1fr; }
+  .fr-4,.fr-3,.fr-2 { grid-template-columns: 1fr !important; }
+
   .topbar-nav { display: none; }
-  .main-content { padding: 16px 12px; }
+  .brand-name  { font-size: 12px; }
+  .main-content { padding: 14px 12px 80px; }
+
+  /* ─── شريط التنقل السفلي ─── */
+  .bottom-nav {
+    display: flex !important;
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1.5px solid var(--border);
+    z-index: 300;
+    box-shadow: 0 -4px 20px rgba(0,0,0,.08);
+    height: 62px;
+  }
+  .bottom-nav-btn {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 3px; border: none; background: none;
+    cursor: pointer; color: var(--text-muted);
+    font-family: 'Cairo', sans-serif;
+    font-weight: 700; padding: 6px 2px;
+    transition: all .15s; position: relative;
+    min-width: 0;
+  }
+  .bottom-nav-btn .bn-icon  { font-size: 19px; line-height: 1; }
+  .bottom-nav-btn .bn-label { font-size: 9.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 64px; }
+  .bottom-nav-btn.active { color: var(--accent); }
+  .bottom-nav-btn.active::before {
+    content: '';
+    position: absolute; top: 0; left: 15%; right: 15%;
+    height: 3px; border-radius: 0 0 3px 3px;
+    background: var(--accent);
+  }
+  .bottom-nav-btn:active { transform: scale(.9); }
 }
+
+/* مخفي على الكمبيوتر */
+.bottom-nav { display: none; }
 
 /* ─── Forms ─── */
 .form-group { display: flex; flex-direction: column; gap: 5px; }
