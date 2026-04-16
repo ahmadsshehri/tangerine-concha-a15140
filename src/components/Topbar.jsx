@@ -25,6 +25,7 @@ export default function Topbar({ activePage, onNav }) {
   ].filter(Boolean)
 
   return (
+    <>
     <nav className="topbar">
       <div className="topbar-brand">
         <div className="brand-icon">🏥</div>
@@ -55,5 +56,20 @@ export default function Topbar({ activePage, onNav }) {
         </button>
       </div>
     </nav>
+
+    {/* ─── شريط التنقل السفلي للجوال ─── */}
+    <nav className="bottom-nav">
+      {allowed.map(item => (
+        <button
+          key={item.id}
+          className={`bottom-nav-btn ${activePage === item.id ? 'active' : ''}`}
+          onClick={() => onNav(item.id)}
+        >
+          <span className="bn-icon">{item.icon}</span>
+          <span className="bn-label">{item.label}</span>
+        </button>
+      ))}
+    </nav>
+    </>
   )
 }
