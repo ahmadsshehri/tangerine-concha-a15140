@@ -6,6 +6,7 @@ import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
 import { MASANDAT, QA, QPROG, QDAYS } from '../../lib/constants'
+import { EvalGuideButton } from '../../components/EvalGuideModal'
 
 function weekNum(d) {
   const j = new Date(d.getFullYear(), 0, 1)
@@ -24,18 +25,15 @@ export default function CaretakerPage() {
   const [loading,  setLoading]  = useState(false)
   const [saving,   setSaving]   = useState(false)
   const [editId,   setEditId]   = useState(null)
-  const [tab,      setTab]      = useState('entry') // entry | saved
+  const [tab,      setTab]      = useState('entry')
 
-  // Selection
   const [selM,  setSelM]  = useState(null)
   const [selW,  setSelW]  = useState(null)
 
-  // Week dates
   const [fromDate, setFromDate] = useState('')
   const [toDate,   setToDate]   = useState('')
   const [weekLabel, setWeekLabel] = useState('')
 
-  // Form
   const [scores,   setScores]   = useState(initScores)
   const [programs, setPrograms] = useState(initPrograms)
   const [dayMeta,  setDayMeta]  = useState(initDayMeta)
@@ -171,6 +169,7 @@ export default function CaretakerPage() {
           <div className="icon" style={{ background: 'rgba(63,185,80,.15)' }}>📊</div>
           التقييم الأسبوعي للقيّمين
         </div>
+        <EvalGuideButton type="qayyim" />
       </div>
 
       <div className="tabs">
@@ -182,10 +181,8 @@ export default function CaretakerPage() {
         </button>
       </div>
 
-      {/* ─ Entry Tab ─ */}
       {tab === 'entry' && (
         <div>
-          {/* Masanda */}
           <div className="card" style={{ marginBottom: 14 }}>
             <div className="card-title">الخطوة 1 — المساندة</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -198,7 +195,6 @@ export default function CaretakerPage() {
             </div>
           </div>
 
-          {/* Wing */}
           {selM !== null && (
             <div className="card animate-in" style={{ marginBottom: 14 }}>
               <div className="card-title">الخطوة 2 — الجناح ({m.name})</div>
@@ -218,7 +214,6 @@ export default function CaretakerPage() {
             </div>
           )}
 
-          {/* Week dates */}
           {selW !== null && (
             <div className="card animate-in" style={{ marginBottom: 14 }}>
               <div className="card-title">📅 {m.name} — {wLabel}</div>
@@ -256,12 +251,10 @@ export default function CaretakerPage() {
             </div>
           )}
 
-          {/* Day-by-day scores */}
           {selW !== null && fromDate && (
             <div className="card animate-in" style={{ marginBottom: 14 }}>
               <div className="card-title">تقييم الأيام</div>
 
-              {/* Day tabs */}
               <div className="day-tabs">
                 {QDAYS.map((day, di) => {
                   const d = new Date(fromDate + 'T12:00:00')
@@ -277,7 +270,6 @@ export default function CaretakerPage() {
                 })}
               </div>
 
-              {/* Day form */}
               <div className="form-row fr-2" style={{ marginBottom: 14 }}>
                 <div className="form-group">
                   <label>مخالفات اليوم</label>
@@ -325,7 +317,6 @@ export default function CaretakerPage() {
             </div>
           )}
 
-          {/* Programs table */}
           {selW !== null && fromDate && (
             <div className="card animate-in" style={{ marginBottom: 14 }}>
               <div className="card-title">📋 جدول البرامج والأنشطة</div>
@@ -391,7 +382,6 @@ export default function CaretakerPage() {
         </div>
       )}
 
-      {/* ─ Saved Tab ─ */}
       {tab === 'saved' && (
         <div>
           {loading ? (
