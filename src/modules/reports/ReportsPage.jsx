@@ -4,6 +4,7 @@ import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
 import { MASANDAT, AXES, MOVEMENT_TYPES, TOOL_REPORT_STATUSES, FACILITY_REPORT_STATUSES } from '../../lib/constants'
+import SupervisorBiasReport from './SupervisorBiasReport'
 
 // ─── تصدير Excel ──────────────────────────────────────────────────────────────
 function exportToExcel(rows, headers, filename) {
@@ -59,23 +60,25 @@ function ExportBar({ onPrint, onExcel, count }) {
   )
 }
 
-
-
+// ─── التبويبات — أضفنا supervisor_bias للمدير فقط ────────────────────────────
 const ALL_REPORT_TABS = [
-  { id: 'daily',      label: '📊 التقرير اليومي',   perm: 'reports_daily'       },
-  { id: 'wing',       label: '🏠 تقرير الجناح',     perm: 'supervisor_reports'  },
-  { id: 'supervisor', label: '🌙 ملاحظات المشرفين', perm: 'supervisor_reports'  },
-  { id: 'caretaker',  label: '📋 تقارير القيّمين',  perm: 'caretaker_reports'   },
-  { id: 'needs',      label: '📏 الاحتياج',          perm: 'custody_reports'     },
-  { id: 'movements',  label: '🔄 الحركات',           perm: 'custody_reports'     },
-  { id: 'tool',       label: '🔧 بلاغات الأدوات',    perm: 'reports_view_all'    },
-  { id: 'facility',   label: '🏗️ بلاغات الصيانة',  perm: 'reports_view_all'    },
-  { id: 'inventory',  label: '📦 عهدة الأجنحة',      perm: 'custody_reports'     },
+  { id: 'daily',           label: '📊 التقرير اليومي',   perm: 'reports_daily',      adminOnly: false },
+  { id: 'wing',            label: '🏠 تقرير الجناح',     perm: 'supervisor_reports', adminOnly: false },
+  { id: 'supervisor',      label: '🌙 ملاحظات المشرفين', perm: 'supervisor_reports', adminOnly: false },
+  { id: 'caretaker',       label: '📋 تقارير القيّمين',  perm: 'caretaker_reports',  adminOnly: false },
+  { id: 'needs',           label: '📏 الاحتياج',          perm: 'custody_reports',    adminOnly: false },
+  { id: 'movements',       label: '🔄 الحركات',           perm: 'custody_reports',    adminOnly: false },
+  { id: 'tool',            label: '🔧 بلاغات الأدوات',    perm: 'reports_view_all',   adminOnly: false },
+  { id: 'facility',        label: '🏗️ بلاغات الصيانة',  perm: 'reports_view_all',   adminOnly: false },
+  { id: 'inventory',       label: '📦 عهدة الأجنحة',      perm: 'custody_reports',    adminOnly: false },
+  { id: 'supervisor_bias', label: '🎯 مقارنة المشرفين',  perm: null,                 adminOnly: true  },
 ]
 
 export default function ReportsPage() {
   const { isAdmin, hasPerm } = useAuth()
-  const TAB_LIST = ALL_REPORT_TABS.filter(t => isAdmin || hasPerm(t.perm))
+  const TAB_LIST = ALL_REPORT_TABS.filter(t =>
+    t.adminOnly ? isAdmin : (isAdmin || hasPerm(t.perm))
+  )
   const [tab, setTab] = useState(null)
   const activeTab = TAB_LIST.find(t => t.id === tab)?.id || TAB_LIST[0]?.id || 'daily'
   return (
@@ -88,20 +91,30 @@ export default function ReportsPage() {
       </div>
       <div className="tabs" style={{ overflowX: 'auto', flexWrap: 'nowrap' }}>
         {TAB_LIST.map(t => (
-          <button key={t.id} className={`tab-btn ${activeTab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+          <button
+            key={t.id}
+            className={`tab-btn ${activeTab === t.id ? 'active' : ''}`}
+            onClick={() => setTab(t.id)}
+            style={t.adminOnly ? {
+              color: activeTab === t.id ? 'var(--purple)' : undefined,
+              borderBottomColor: activeTab === t.id ? 'var(--purple)' : undefined
+            } : {}}
+          >
             {t.label}
+            {t.adminOnly && <span style={{ fontSize: 9, marginRight: 3, opacity: .6 }}>🔒</span>}
           </button>
         ))}
       </div>
-      {activeTab === 'daily'      && <DailyReport />}
-      {activeTab === 'wing'       && <WingReport />}
-      {activeTab === 'supervisor' && <SupervisorReport />}
-      {activeTab === 'caretaker'  && <CaretakerReport />}
-      {activeTab === 'needs'      && <NeedsReport />}
-      {activeTab === 'movements'  && <MovementsReport />}
-      {activeTab === 'tool'       && <ToolReport />}
-      {activeTab === 'facility'   && <FacilityReport />}
-      {activeTab === 'inventory'  && <InventoryReport />}
+      {activeTab === 'daily'           && <DailyReport />}
+      {activeTab === 'wing'            && <WingReport />}
+      {activeTab === 'supervisor'      && <SupervisorReport />}
+      {activeTab === 'caretaker'       && <CaretakerReport />}
+      {activeTab === 'needs'           && <NeedsReport />}
+      {activeTab === 'movements'       && <MovementsReport />}
+      {activeTab === 'tool'            && <ToolReport />}
+      {activeTab === 'facility'        && <FacilityReport />}
+      {activeTab === 'inventory'       && <InventoryReport />}
+      {activeTab === 'supervisor_bias' && isAdmin && <SupervisorBiasReport />}
     </div>
   )
 }
@@ -194,7 +207,7 @@ function FollowUpCell({ recordId, field, existing }) {
   )
 }
 
-// ─── جلب الإجراءات لمجموعة من السجلات ────────────────────────────────────────
+// ─── جلب الإجراءات ────────────────────────────────────────────────────────────
 async function fetchFollowups(ids) {
   if (!ids.length) return {}
   const snap = await getDocs(collection(db, 'followups'))
@@ -209,8 +222,7 @@ async function fetchFollowups(ids) {
   return map
 }
 
-
-// ─── التقرير اليومي المفصّل (مطابق للنظام الأصلي) ────────────────────────────
+// ─── التقرير اليومي ───────────────────────────────────────────────────────────
 const DAR_AR = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']
 
 function DailyReport() {
@@ -262,7 +274,6 @@ function DailyReport() {
   const bg    = v => v >= 83 ? '#e3f9ee' : v >= 58 ? '#fef3c7' : '#fde8e8'
   const pilC  = pct => pct >= 83 ? 'pill-g' : pct >= 58 ? 'pill-o' : 'pill-r'
 
-  // ─ CSS مشترك للطباعة
   const PRINT_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -329,7 +340,6 @@ ${notesHtml}
 
   return (
     <div className="animate-in">
-      {/* شريط الأدوات */}
       <div className="card" style={{ marginBottom:16 }}>
         <div style={{ display:'flex', gap:12, alignItems:'flex-end' }}>
           <div className="form-group" style={{ flex:1 }}>
@@ -350,7 +360,6 @@ ${notesHtml}
 
       {!loading && wings.length > 0 && (
         <>
-          {/* Header Banner */}
           <div style={{ background:'linear-gradient(135deg,#1e3a8a,#1a56db)', borderRadius:'var(--r)', padding:'20px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16, color:'#fff' }}>
             <div>
               <div style={{ fontSize:18, fontWeight:900 }}>🏛️ التقرير اليومي — الفترة المسائية</div>
@@ -359,7 +368,6 @@ ${notesHtml}
             <div style={{ textAlign:'left', fontSize:12, opacity:.85 }}><div>👤 {uName}</div></div>
           </div>
 
-          {/* بطاقات الإحصاء */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:16 }}>
             {[
               {label:'إجمالي المستفيدين', value:tB.toLocaleString(), color:'#1a56db', bg:'#ebf0fd'},
@@ -374,7 +382,6 @@ ${notesHtml}
             ))}
           </div>
 
-          {/* جدول الأجنحة */}
           <div className="card" style={{ marginBottom:14 }}>
             <div className="card-title">📋 أولاً: ملخص الأداء — تفصيل الأجنحة</div>
             <div className="table-wrap"><table>
@@ -396,7 +403,6 @@ ${notesHtml}
             </table></div>
           </div>
 
-          {/* جدول المساندات */}
           <div className="card" style={{ marginBottom:14 }}>
             <div className="card-title">📊 ثانياً: ملخص بالمساندة</div>
             <div className="table-wrap"><table>
@@ -424,7 +430,6 @@ ${notesHtml}
             </table></div>
           </div>
 
-          {/* أفضل وأسوأ */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
             <div className="card">
               <div className="card-title" style={{color:'#057a55'}}>🏆 ثالثاً: أفضل 3 مساندات</div>
@@ -446,7 +451,6 @@ ${notesHtml}
             </div>
           </div>
 
-          {/* مخطط الأعمدة */}
           <div className="card" style={{ marginBottom:14 }}>
             <div className="card-title">📊 توزيع الدرجات</div>
             {wings.map((w,i)=>{ const pct=(w.totalScore/60)*100; const c=sc(pct); return (
@@ -460,7 +464,6 @@ ${notesHtml}
             )})}
           </div>
 
-          {/* الملاحظات */}
           {['amni','fanni','baramij'].some(k => wings.some(w => w.obs?.[k])) && (
             <div className="card">
               <div className="card-title">📝 رابعاً: الملاحظات المرصودة</div>
@@ -488,24 +491,20 @@ ${notesHtml}
   )
 }
 
-// ─── تقارير المشرفين المتقدمة ─────────────────────────────────────────────────
+// ─── تقارير المشرفين ──────────────────────────────────────────────────────────
 function SupervisorReport() {
   const toast = useToast()
   const [wings,     setWings]     = useState([])
   const [followups, setFollowups] = useState({})
   const [loading,   setLoading]   = useState(false)
-
-  // فلاتر
   const [from,       setFrom]       = useState('')
   const [to,         setTo]         = useState('')
   const [selMasanda, setSelMasanda] = useState('')
   const [selWing,    setSelWing]    = useState('')
-  const [obsType,    setObsType]    = useState('all') // all | amni | fanni | baramij
+  const [obsType,    setObsType]    = useState('all')
   const [showEmpty,  setShowEmpty]  = useState(false)
 
-  const wingOptions = selMasanda
-    ? MASANDAT.find(m => m.id === selMasanda)?.wings || []
-    : []
+  const wingOptions = selMasanda ? MASANDAT.find(m => m.id === selMasanda)?.wings || [] : []
 
   const load = async () => {
     if (!from || !to) { toast('⚠️ حدد الفترة الزمنية', 'warn'); return }
@@ -518,7 +517,6 @@ function SupervisorReport() {
       if (selWing)    all = all.filter(w => String(w.wing) === String(selWing))
       all.sort((a, b) => (b.date || '') > (a.date || '') ? 1 : -1)
       setWings(all)
-      // جلب الإجراءات
       const ids = all.map(w => `${w.date}_${w.masandaId}_${w.wing}`)
       const fu  = await fetchFollowups(ids)
       setFollowups(fu)
@@ -526,7 +524,6 @@ function SupervisorReport() {
     setLoading(false)
   }
 
-  // فلترة الملاحظات حسب النوع المختار
   const hasObs = (w) => {
     if (obsType === 'all')     return w.obs?.amni || w.obs?.fanni || w.obs?.baramij
     if (obsType === 'amni')    return w.obs?.amni
@@ -536,26 +533,17 @@ function SupervisorReport() {
   }
 
   const filtered = showEmpty ? wings : wings.filter(w => hasObs(w))
-
   const scoreColor = v => v >= 50 ? 'var(--green)' : v >= 35 ? 'var(--orange)' : 'var(--red)'
-
   const obsLabel = { amni: 'أمنية', fanni: 'فنية', baramij: 'برامج' }
   const obsColor = { amni: 'var(--red)', fanni: 'var(--orange)', baramij: 'var(--blue)' }
 
   return (
     <div className="animate-in">
-      {/* فلاتر */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title">🔍 فلاتر البحث</div>
         <div className="form-row fr-3" style={{ marginBottom: 12 }}>
-          <div className="form-group">
-            <label>من تاريخ *</label>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label>إلى تاريخ *</label>
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} />
-          </div>
+          <div className="form-group"><label>من تاريخ *</label><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></div>
+          <div className="form-group"><label>إلى تاريخ *</label><input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
           <div className="form-group">
             <label>المساندة</label>
             <select value={selMasanda} onChange={e => { setSelMasanda(e.target.value); setSelWing('') }}>
@@ -581,9 +569,7 @@ function SupervisorReport() {
           </div>
           <div className="form-group" style={{ justifyContent: 'flex-end' }}>
             <label style={{ opacity: 0 }}>_</label>
-            <button className="btn btn-primary" onClick={load} style={{ width: '100%' }}>
-              🔍 عرض النتائج
-            </button>
+            <button className="btn btn-primary" onClick={load} style={{ width: '100%' }}>🔍 عرض النتائج</button>
           </div>
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>
@@ -596,17 +582,13 @@ function SupervisorReport() {
 
       {!loading && wings.length > 0 && (
         <>
-          {/* تصدير */}
-          <ExportBar
-            count={filtered.length}
+          <ExportBar count={filtered.length}
             onExcel={() => {
               const headers = ['التاريخ','المساندة','الجناح','الدرجة','ملاحظة أمنية','إجراء أمني','ملاحظة فنية','إجراء فني','ملاحظات برامج','إجراء برامج','المستفيدون','المخالفات']
               const rows = filtered.map(w => {
                 const rid = `${w.date}_${w.masandaId}_${w.wing}`
                 const fu  = followups[rid] || {}
-                return [w.date, w.masandaName, isNaN(w.wing)?w.wing:`جناح ${w.wing}`, w.totalScore,
-                  w.obs?.amni||'', fu['amni']?.text||'', w.obs?.fanni||'', fu['fanni']?.text||'',
-                  w.obs?.baramij||'', fu['baramij']?.text||'', w.beneficiaries||0, w.violations||0]
+                return [w.date, w.masandaName, isNaN(w.wing)?w.wing:`جناح ${w.wing}`, w.totalScore, w.obs?.amni||'', fu['amni']?.text||'', w.obs?.fanni||'', fu['fanni']?.text||'', w.obs?.baramij||'', fu['baramij']?.text||'', w.beneficiaries||0, w.violations||0]
               })
               exportToExcel(rows, headers, 'تقرير-المشرفين')
             }}
@@ -615,20 +597,18 @@ function SupervisorReport() {
               const rows = filtered.map(w => {
                 const rid = `${w.date}_${w.masandaId}_${w.wing}`
                 const fu  = followups[rid] || {}
-                return [w.date, w.masandaName, isNaN(w.wing)?w.wing:`جناح ${w.wing}`, `${w.totalScore}/60`,
-                  w.obs?.amni||'—', fu['amni']?.text||'—', w.obs?.fanni||'—', w.obs?.baramij||'—']
+                return [w.date, w.masandaName, isNaN(w.wing)?w.wing:`جناح ${w.wing}`, `${w.totalScore}/60`, w.obs?.amni||'—', fu['amni']?.text||'—', w.obs?.fanni||'—', w.obs?.baramij||'—']
               })
               printTable('تقرير الملاحظات المسائية', headers, rows)
             }}
           />
 
-          {/* إحصاءات سريعة */}
           <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: 16 }}>
             {[
-              { label: 'إجمالي السجلات',    value: wings.length,                               icon: '📋', color: 'var(--accent)' },
-              { label: 'لها ملاحظات أمنية', value: wings.filter(w => w.obs?.amni).length,     icon: '🛡️', color: 'var(--red)'    },
-              { label: 'لها ملاحظات فنية',  value: wings.filter(w => w.obs?.fanni).length,    icon: '🔧', color: 'var(--orange)' },
-              { label: 'لها ملاحظات برامج', value: wings.filter(w => w.obs?.baramij).length,  icon: '📚', color: 'var(--blue)'   },
+              { label: 'إجمالي السجلات',    value: wings.length,                             icon: '📋', color: 'var(--accent)' },
+              { label: 'لها ملاحظات أمنية', value: wings.filter(w => w.obs?.amni).length,   icon: '🛡️', color: 'var(--red)'    },
+              { label: 'لها ملاحظات فنية',  value: wings.filter(w => w.obs?.fanni).length,  icon: '🔧', color: 'var(--orange)' },
+              { label: 'لها ملاحظات برامج', value: wings.filter(w => w.obs?.baramij).length,icon: '📚', color: 'var(--blue)'   },
             ].map((s, i) => (
               <div key={i} className="stat-card" style={{ '--card-accent': s.color }}>
                 <div className="stat-icon">{s.icon}</div>
@@ -638,57 +618,33 @@ function SupervisorReport() {
             ))}
           </div>
 
-          {/* بطاقات الملاحظات مع المتابعة */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {filtered.map(w => {
               const rid = `${w.date}_${w.masandaId}_${w.wing}`
               const fu  = followups[rid] || {}
-              const obsToShow = obsType === 'all'
-                ? ['amni','fanni','baramij'].filter(k => w.obs?.[k])
-                : [obsType].filter(k => w.obs?.[k])
-
+              const obsToShow = obsType === 'all' ? ['amni','fanni','baramij'].filter(k => w.obs?.[k]) : [obsType].filter(k => w.obs?.[k])
               if (obsToShow.length === 0 && !showEmpty) return null
-
               return (
                 <div key={rid} className="card" style={{ borderRight: `3px solid ${scoreColor(w.totalScore)}` }}>
-                  {/* رأس البطاقة */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ fontWeight: 800, fontSize: 14 }}>
-                        {w.masandaName} — {isNaN(w.wing) ? w.wing : `جناح ${w.wing}`}
-                      </div>
+                      <div style={{ fontWeight: 800, fontSize: 14 }}>{w.masandaName} — {isNaN(w.wing) ? w.wing : `جناح ${w.wing}`}</div>
                       <span className="badge badge-dim">{w.date}</span>
-                      <span style={{ fontWeight: 800, color: scoreColor(w.totalScore), fontSize: 13 }}>
-                        {w.totalScore} / 60
-                      </span>
+                      <span style={{ fontWeight: 800, color: scoreColor(w.totalScore), fontSize: 13 }}>{w.totalScore} / 60</span>
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      {w.savedBy || ''} | 👥 {w.beneficiaries || 0} | ⚠️ {w.violations || 0}
-                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{w.savedBy || ''} | 👥 {w.beneficiaries || 0} | ⚠️ {w.violations || 0}</div>
                   </div>
-
-                  {/* الملاحظات مع المتابعة */}
                   {obsToShow.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {obsToShow.map(key => (
-                        <div key={key} style={{
-                          display: 'grid', gridTemplateColumns: '1fr auto',
-                          gap: 12, alignItems: 'start',
-                          background: 'var(--surface2)', border: '1px solid var(--border)',
-                          borderRadius: 'var(--rs)', padding: '12px 14px',
-                          borderRight: `3px solid ${obsColor[key]}`
-                        }}>
+                        <div key={key} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'start', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--rs)', padding: '12px 14px', borderRight: `3px solid ${obsColor[key]}` }}>
                           <div>
                             <div style={{ fontSize: 11, fontWeight: 700, color: obsColor[key], marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.5px' }}>
                               {key === 'amni' ? '🛡️' : key === 'fanni' ? '🔧' : '📚'} ملاحظة {obsLabel[key]}
                             </div>
-                            <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.7 }}>
-                              {w.obs[key]}
-                            </div>
+                            <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.7 }}>{w.obs[key]}</div>
                           </div>
-                          <div style={{ minWidth: 120 }}>
-                            <FollowUpCell recordId={rid} field={key} existing={fu[key]} />
-                          </div>
+                          <div style={{ minWidth: 120 }}><FollowUpCell recordId={rid} field={key} existing={fu[key]} /></div>
                         </div>
                       ))}
                     </div>
@@ -711,16 +667,13 @@ function SupervisorReport() {
       )}
 
       {!loading && wings.length === 0 && from && to && (
-        <div className="empty-state">
-          <div className="es-icon">📭</div>
-          <div className="es-title">لا توجد بيانات في هذه الفترة</div>
-        </div>
+        <div className="empty-state"><div className="es-icon">📭</div><div className="es-title">لا توجد بيانات في هذه الفترة</div></div>
       )}
     </div>
   )
 }
 
-// ─── تقارير القيّمين المتقدمة ─────────────────────────────────────────────────
+// ─── تقارير القيّمين ──────────────────────────────────────────────────────────
 function CaretakerReport() {
   const toast = useToast()
   const [records,   setRecords]   = useState([])
@@ -732,9 +685,7 @@ function CaretakerReport() {
   const [selWing,    setSelWing]    = useState('')
   const [selAxis,    setSelAxis]    = useState('')
 
-  const wingOptions = selMasanda
-    ? MASANDAT.find(m => m.id === selMasanda)?.wings || []
-    : []
+  const wingOptions = selMasanda ? MASANDAT.find(m => m.id === selMasanda)?.wings || [] : []
 
   const load = async () => {
     if (!from || !to) { toast('⚠️ حدد الفترة الزمنية', 'warn'); return }
@@ -747,9 +698,7 @@ function CaretakerReport() {
         if (r.to   && r.to   > to)   return false
         return true
       })
-      if (selMasanda) {
-        all = all.filter(r => r.center?.startsWith(selMasanda))
-      }
+      if (selMasanda) all = all.filter(r => r.center?.startsWith(selMasanda))
       if (selWing) {
         const locId = `${selMasanda}_${String(selWing).replace(/\s/g,'_')}`
         all = all.filter(r => r.center === locId)
@@ -773,27 +722,13 @@ function CaretakerReport() {
     return isNaN(w) ? w : `جناح ${w}`
   }
 
-  // حساب متوسط يوم معين
-  const dayAvg = (rec, di) => {
-    const day = rec.days?.[di]
-    if (!day) return 0
-    return day.axes?.reduce((s, ax) => s + (ax.total || 0), 0) || 0
-  }
-
   return (
     <div className="animate-in">
-      {/* فلاتر */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title">🔍 فلاتر البحث</div>
         <div className="form-row fr-3" style={{ marginBottom: 12 }}>
-          <div className="form-group">
-            <label>من تاريخ *</label>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label>إلى تاريخ *</label>
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} />
-          </div>
+          <div className="form-group"><label>من تاريخ *</label><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></div>
+          <div className="form-group"><label>إلى تاريخ *</label><input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
           <div className="form-group">
             <label>المساندة</label>
             <select value={selMasanda} onChange={e => { setSelMasanda(e.target.value); setSelWing('') }}>
@@ -821,9 +756,7 @@ function CaretakerReport() {
           </div>
           <div className="form-group" style={{ justifyContent: 'flex-end' }}>
             <label style={{ opacity: 0 }}>_</label>
-            <button className="btn btn-primary" onClick={load} style={{ width: '100%' }}>
-              🔍 عرض النتائج
-            </button>
+            <button className="btn btn-primary" onClick={load} style={{ width: '100%' }}>🔍 عرض النتائج</button>
           </div>
         </div>
       </div>
@@ -832,29 +765,22 @@ function CaretakerReport() {
 
       {!loading && records.length > 0 && (
         <>
-          <ExportBar
-            count={records.length}
+          <ExportBar count={records.length}
             onExcel={() => {
               const headers = ['المساندة','الجناح','من','إلى','المستفيدون','الحوادث','ملاحظات']
-              const rows = records.map(r => [
-                getMasandaName(r.center), getWingLabel(r.center),
-                r.from||'', r.to||'', r.ben||0, r.incidents||0, r.notes||''
-              ])
+              const rows = records.map(r => [getMasandaName(r.center), getWingLabel(r.center), r.from||'', r.to||'', r.ben||0, r.incidents||0, r.notes||''])
               exportToExcel(rows, headers, 'تقرير-القيمين')
             }}
             onPrint={() => {
               const headers = ['المساندة','الجناح','من','إلى','المستفيدون','الحوادث']
-              const rows = records.map(r => [
-                getMasandaName(r.center), getWingLabel(r.center),
-                r.from||'', r.to||'', r.ben||0, r.incidents||0
-              ])
+              const rows = records.map(r => [getMasandaName(r.center), getWingLabel(r.center), r.from||'', r.to||'', r.ben||0, r.incidents||0])
               printTable('تقرير تقييم القيّمين', headers, rows)
             }}
           />
 
           <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 16 }}>
             {[
-              { label: 'إجمالي السجلات', value: records.length,                                          icon: '📋', color: 'var(--accent)' },
+              { label: 'إجمالي السجلات',    value: records.length,                                       icon: '📋', color: 'var(--accent)' },
               { label: 'إجمالي المستفيدين', value: records.reduce((s,r) => s + (r.ben||0), 0),          icon: '👥', color: 'var(--blue)'   },
               { label: 'إجمالي الحوادث',    value: records.reduce((s,r) => s + (r.incidents||0), 0),    icon: '⚠️', color: 'var(--orange)' },
             ].map((s, i) => (
@@ -869,45 +795,24 @@ function CaretakerReport() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {records.map(r => {
               const fu = followups[r.id] || {}
-              // فلترة المحاور
               const axesToShow = selAxis
-                ? r.days?.map((day, di) => ({
-                    di, day,
-                    ax: day.axes?.find(a => a.key === selAxis)
-                  })).filter(x => x.ax)
+                ? r.days?.map((day, di) => ({ di, day, ax: day.axes?.find(a => a.key === selAxis) })).filter(x => x.ax)
                 : null
 
               return (
                 <div key={r.id} className="card">
-                  {/* رأس */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ fontWeight: 800, fontSize: 14 }}>
-                        {getMasandaName(r.center)} — {getWingLabel(r.center)}
-                      </div>
+                      <div style={{ fontWeight: 800, fontSize: 14 }}>{getMasandaName(r.center)} — {getWingLabel(r.center)}</div>
                       <span className="badge badge-dim">{r.from} ← {r.to}</span>
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      {r.savedBy} | 👥 {r.ben || 0} | ⚠️ {r.incidents || 0}
-                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.savedBy} | 👥 {r.ben || 0} | ⚠️ {r.incidents || 0}</div>
                   </div>
 
-                  {/* جدول الأيام / المحاور */}
                   {!selAxis ? (
-                    // عرض ملخص الأيام كلها
                     <div className="table-wrap" style={{ marginBottom: r.notes ? 12 : 0 }}>
                       <table>
-                        <thead>
-                          <tr>
-                            <th>اليوم</th>
-                            <th>الالتزام</th>
-                            <th>السلوك</th>
-                            <th>التفاعل</th>
-                            <th>السكن</th>
-                            <th>الإجمالي</th>
-                            <th>مخالفات</th>
-                          </tr>
-                        </thead>
+                        <thead><tr><th>اليوم</th><th>الالتزام</th><th>السلوك</th><th>التفاعل</th><th>السكن</th><th>الإجمالي</th><th>مخالفات</th></tr></thead>
                         <tbody>
                           {r.days?.map((day, di) => {
                             const totals = day.axes?.map(ax => ax.total || 0) || []
@@ -926,15 +831,9 @@ function CaretakerReport() {
                       </table>
                     </div>
                   ) : (
-                    // عرض المحور المختار فقط مع إجراءات المتابعة
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {axesToShow?.map(({ di, day, ax }) => (
-                        <div key={di} style={{
-                          display: 'grid', gridTemplateColumns: '1fr auto',
-                          gap: 12, alignItems: 'start',
-                          background: 'var(--surface2)', border: '1px solid var(--border)',
-                          borderRadius: 'var(--rs)', padding: '12px 14px'
-                        }}>
+                        <div key={di} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'start', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--rs)', padding: '12px 14px' }}>
                           <div>
                             <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>
                               {day.day} — {ax.label}
@@ -942,31 +841,18 @@ function CaretakerReport() {
                             </div>
                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                               {ax.scores?.map((s, si) => (
-                                <span key={si} style={{
-                                  padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
-                                  background: s >= 4 ? 'var(--green-dim)' : s >= 3 ? 'var(--orange-dim)' : 'var(--red-dim)',
-                                  color:      s >= 4 ? 'var(--green)'     : s >= 3 ? 'var(--orange)'     : 'var(--red)'
-                                }}>
-                                  {s}
-                                </span>
+                                <span key={si} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: s >= 4 ? 'var(--green-dim)' : s >= 3 ? 'var(--orange-dim)' : 'var(--red-dim)', color: s >= 4 ? 'var(--green)' : s >= 3 ? 'var(--orange)' : 'var(--red)' }}>{s}</span>
                               ))}
                             </div>
                           </div>
-                          <div style={{ minWidth: 120 }}>
-                            <FollowUpCell recordId={r.id} field={`day${di}_${selAxis}`} existing={fu[`day${di}_${selAxis}`]} />
-                          </div>
+                          <div style={{ minWidth: 120 }}><FollowUpCell recordId={r.id} field={`day${di}_${selAxis}`} existing={fu[`day${di}_${selAxis}`]} /></div>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  {/* الملاحظات العامة */}
                   {r.notes && (
-                    <div style={{
-                      marginTop: 12, padding: '10px 14px',
-                      background: 'var(--blue-dim)', borderRadius: 'var(--rs)',
-                      display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'start'
-                    }}>
+                    <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--blue-dim)', borderRadius: 'var(--rs)', display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'start' }}>
                       <div>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', marginBottom: 4 }}>📝 ملاحظات عامة</div>
                         <div style={{ fontSize: 13 }}>{r.notes}</div>
@@ -982,42 +868,32 @@ function CaretakerReport() {
       )}
 
       {!loading && records.length === 0 && from && to && (
-        <div className="empty-state">
-          <div className="es-icon">📭</div>
-          <div className="es-title">لا توجد بيانات في هذه الفترة</div>
-        </div>
+        <div className="empty-state"><div className="es-icon">📭</div><div className="es-title">لا توجد بيانات في هذه الفترة</div></div>
       )}
     </div>
   )
 }
 
-
-// ─── تقرير جناح محدد خلال فترة ───────────────────────────────────────────────
+// ─── تقرير جناح محدد ─────────────────────────────────────────────────────────
 function WingReport() {
   const toast = useToast()
   const [from,       setFrom]       = useState('')
   const [to,         setTo]         = useState('')
   const [selMasanda, setSelMasanda] = useState('')
   const [selWing,    setSelWing]    = useState('')
-  const [data,       setData]       = useState([])   // array of wing records sorted by date
+  const [data,       setData]       = useState([])
   const [loading,    setLoading]    = useState(false)
 
-  const wingOptions = selMasanda
-    ? MASANDAT.find(m => m.id === selMasanda)?.wings || []
-    : []
+  const wingOptions = selMasanda ? MASANDAT.find(m => m.id === selMasanda)?.wings || [] : []
 
   const load = async () => {
-    if (!from || !to)              { toast('⚠️ حدد الفترة الزمنية', 'warn'); return }
-    if (!selMasanda || !selWing)   { toast('⚠️ اختر المساندة والجناح', 'warn'); return }
+    if (!from || !to)            { toast('⚠️ حدد الفترة الزمنية', 'warn'); return }
+    if (!selMasanda || !selWing) { toast('⚠️ اختر المساندة والجناح', 'warn'); return }
     setLoading(true)
     try {
       const snap = await getDocs(collection(db, 'wings'))
       let recs = snap.docs.map(d => d.data())
-      recs = recs.filter(w =>
-        w.masandaId === selMasanda &&
-        String(w.wing) === String(selWing) &&
-        w.date >= from && w.date <= to
-      )
+      recs = recs.filter(w => w.masandaId === selMasanda && String(w.wing) === String(selWing) && w.date >= from && w.date <= to)
       recs.sort((a, b) => a.date > b.date ? 1 : -1)
       setData(recs)
     } catch (e) { toast('❌ ' + e.message, 'error') }
@@ -1032,92 +908,29 @@ function WingReport() {
   const maxScore = data.length ? Math.max(...data.map(w=>w.totalScore)) : 0
   const minScore = data.length ? Math.min(...data.map(w=>w.totalScore)) : 0
 
-  // الطباعة
   const doPrint = () => {
     if (!data.length) { toast('⚠️ لا توجد بيانات', 'warn'); return }
-    const rows = data.map(w => `<tr>
-      <td>${w.date}</td>
-      ${w.axes.map(a=>`<td style="text-align:center">${a.total}/15</td>`).join('')}
-      <td><span style="font-weight:800;color:${sc((w.totalScore/60)*100)}">${w.totalScore}/60</span></td>
-      <td>${w.beneficiaries||'—'}</td>
-      <td style="color:#c81e1e">${w.violations||0}</td>
-      <td style="font-size:10px;color:#5f6b7e">${w.savedBy||'—'}</td>
-    </tr>`).join('')
-
-    const obsRows = ['amni','fanni','baramij'].flatMap(k => {
-      const label = k==='amni'?'🛡️ أمني':k==='fanni'?'🔧 فني':'📚 برامج'
-      const color = k==='amni'?'#c81e1e':k==='fanni'?'#b45309':'#057a55'
-      return data.filter(w=>w.obs?.[k]).map(w=>
-        `<tr><td>${w.date}</td><td style="font-weight:700;color:${color}">${label}</td><td>${w.obs[k]}</td></tr>`
-      )
-    }).join('')
-
-    const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800;900&display=swap');
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Cairo',sans-serif;background:#fff;color:#1e2533;direction:rtl;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-.hdr{background:linear-gradient(135deg,#1e3a8a,#1a56db);color:#fff;padding:16px 24px;display:flex;justify-content:space-between;margin-bottom:14px;}
-.hdr-title{font-size:17px;font-weight:900;} .hdr-sub{font-size:11px;opacity:.8;margin-top:3px;}
-.hdr-right{text-align:left;font-size:11px;opacity:.85;line-height:1.8;}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;}
-.st{border-radius:8px;padding:10px 12px;text-align:center;}
-.st-val{font-size:22px;font-weight:900;} .st-lbl{font-size:10px;color:#5f6b7e;font-weight:700;margin-top:3px;}
-.sec-title{font-size:11px;font-weight:800;color:#1a56db;padding:6px 10px;background:#ebf0fd;border-right:4px solid #1a56db;border-radius:0 6px 6px 0;margin-bottom:8px;}
-table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:12px;}
-th{background:#1a56db;color:#fff;padding:6px 8px;text-align:right;font-weight:700;}
-td{padding:5px 8px;border-bottom:1px solid #e2e6ed;}
-tr:nth-child(even) td{background:#f8f9fb;}
-.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
-.bar-lbl{min-width:60px;font-size:10px;color:#5f6b7e;font-weight:600;}
-.bar-track{flex:1;height:10px;background:#e2e6ed;border-radius:5px;overflow:hidden;}
-.bar-fill{height:100%;border-radius:5px;}
-.bar-val{font-size:10px;font-weight:800;min-width:30px;}
-.footer{border-top:2px solid #e2e6ed;margin-top:12px;padding:8px 0 0;display:flex;justify-content:space-between;font-size:9px;color:#9aa3b0;}
-@media print{@page{size:A4;margin:8mm;}button{display:none!important;}}
-</style></head><body>
-<div class="hdr">
-  <div><div class="hdr-title">🏠 تقرير الجناح — ${m?.name} / ${wLabel}</div><div class="hdr-sub">الفترة: ${from} ← ${to}</div></div>
-  <div class="hdr-right"><div>📅 ${new Date().toLocaleDateString('ar-SA')}</div><div>عدد الأيام: ${data.length}</div></div>
-</div>
-<div class="stats">
-  <div class="st" style="background:#ebf0fd;border:1.5px solid #1a56db"><div class="st-val" style="color:#1a56db">${data.length}</div><div class="st-lbl">أيام مُسجَّلة</div></div>
-  <div class="st" style="background:#e3f9ee;border:1.5px solid #057a55"><div class="st-val" style="color:#057a55">${avgScore}</div><div class="st-lbl">متوسط الدرجة/60</div></div>
-  <div class="st" style="background:#fef3c7;border:1.5px solid #b45309"><div class="st-val" style="color:#b45309">${maxScore}</div><div class="st-lbl">أعلى درجة</div></div>
-  <div class="st" style="background:#fde8e8;border:1.5px solid #c81e1e"><div class="st-val" style="color:#c81e1e">${minScore}</div><div class="st-lbl">أدنى درجة</div></div>
-</div>
-
-<div class="sec-title">📊 توزيع الدرجات اليومية</div>
-${data.map(w=>{const pct=(w.totalScore/60)*100;const col=sc(pct);return`<div class="bar-row"><div class="bar-lbl">${w.date.slice(5)}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div><div class="bar-val" style="color:${col}">${w.totalScore}</div></div>`;}).join('')}
-
+    const rows = data.map(w => `<tr><td>${w.date}</td>${w.axes.map(a=>`<td style="text-align:center">${a.total}/15</td>`).join('')}<td><span style="font-weight:800;color:${sc((w.totalScore/60)*100)}">${w.totalScore}/60</span></td><td>${w.beneficiaries||'—'}</td><td style="color:#c81e1e">${w.violations||0}</td><td style="font-size:10px;color:#5f6b7e">${w.savedBy||'—'}</td></tr>`).join('')
+    const obsRows = ['amni','fanni','baramij'].flatMap(k => { const label=k==='amni'?'🛡️ أمني':k==='fanni'?'🔧 فني':'📚 برامج'; const color=k==='amni'?'#c81e1e':k==='fanni'?'#b45309':'#057a55'; return data.filter(w=>w.obs?.[k]).map(w=>`<tr><td>${w.date}</td><td style="font-weight:700;color:${color}">${label}</td><td>${w.obs[k]}</td></tr>`) }).join('')
+    const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><style>@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800;900&display=swap');*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Cairo',sans-serif;background:#fff;color:#1e2533;direction:rtl;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.hdr{background:linear-gradient(135deg,#1e3a8a,#1a56db);color:#fff;padding:16px 24px;display:flex;justify-content:space-between;margin-bottom:14px;}.hdr-title{font-size:17px;font-weight:900;}.hdr-sub{font-size:11px;opacity:.8;margin-top:3px;}.hdr-right{text-align:left;font-size:11px;opacity:.85;line-height:1.8;}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;}.st{border-radius:8px;padding:10px 12px;text-align:center;}.st-val{font-size:22px;font-weight:900;}.st-lbl{font-size:10px;color:#5f6b7e;font-weight:700;margin-top:3px;}.sec-title{font-size:11px;font-weight:800;color:#1a56db;padding:6px 10px;background:#ebf0fd;border-right:4px solid #1a56db;border-radius:0 6px 6px 0;margin-bottom:8px;}table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:12px;}th{background:#1a56db;color:#fff;padding:6px 8px;text-align:right;font-weight:700;}td{padding:5px 8px;border-bottom:1px solid #e2e6ed;}tr:nth-child(even) td{background:#f8f9fb;}.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}.bar-lbl{min-width:60px;font-size:10px;color:#5f6b7e;font-weight:600;}.bar-track{flex:1;height:10px;background:#e2e6ed;border-radius:5px;overflow:hidden;}.bar-fill{height:100%;border-radius:5px;}.bar-val{font-size:10px;font-weight:800;min-width:30px;}.footer{border-top:2px solid #e2e6ed;margin-top:12px;padding:8px 0 0;display:flex;justify-content:space-between;font-size:9px;color:#9aa3b0;}@media print{@page{size:A4;margin:8mm;}button{display:none!important;}}</style></head><body>
+<div class="hdr"><div><div class="hdr-title">🏠 تقرير الجناح — ${m?.name} / ${wLabel}</div><div class="hdr-sub">الفترة: ${from} ← ${to}</div></div><div class="hdr-right"><div>📅 ${new Date().toLocaleDateString('ar-SA')}</div><div>عدد الأيام: ${data.length}</div></div></div>
+<div class="stats"><div class="st" style="background:#ebf0fd;border:1.5px solid #1a56db"><div class="st-val" style="color:#1a56db">${data.length}</div><div class="st-lbl">أيام مُسجَّلة</div></div><div class="st" style="background:#e3f9ee;border:1.5px solid #057a55"><div class="st-val" style="color:#057a55">${avgScore}</div><div class="st-lbl">متوسط الدرجة/60</div></div><div class="st" style="background:#fef3c7;border:1.5px solid #b45309"><div class="st-val" style="color:#b45309">${maxScore}</div><div class="st-lbl">أعلى درجة</div></div><div class="st" style="background:#fde8e8;border:1.5px solid #c81e1e"><div class="st-val" style="color:#c81e1e">${minScore}</div><div class="st-lbl">أدنى درجة</div></div></div>
+<div class="sec-title">📊 توزيع الدرجات اليومية</div>${data.map(w=>{const pct=(w.totalScore/60)*100;const col=sc(pct);return`<div class="bar-row"><div class="bar-lbl">${w.date.slice(5)}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div><div class="bar-val" style="color:${col}">${w.totalScore}</div></div>`;}).join('')}
 <div class="sec-title" style="margin-top:12px">📋 تفصيل الأيام</div>
-<table>
-<thead><tr><th>التاريخ</th><th>الالتزام/15</th><th>السلوك/15</th><th>التفاعل/15</th><th>السكن/15</th><th>الإجمالي/60</th><th>المستفيدون</th><th>المخالفات</th><th>المدخِل</th></tr></thead>
-<tbody>${rows}</tbody></table>
-
-${obsRows ? `<div class="sec-title">📝 الملاحظات المرصودة</div>
-<table><thead><tr><th>التاريخ</th><th>النوع</th><th>الملاحظة</th></tr></thead><tbody>${obsRows}</tbody></table>` : ''}
-
+<table><thead><tr><th>التاريخ</th><th>الالتزام/15</th><th>السلوك/15</th><th>التفاعل/15</th><th>السكن/15</th><th>الإجمالي/60</th><th>المستفيدون</th><th>المخالفات</th><th>المدخِل</th></tr></thead><tbody>${rows}</tbody></table>
+${obsRows?`<div class="sec-title">📝 الملاحظات المرصودة</div><table><thead><tr><th>التاريخ</th><th>النوع</th><th>الملاحظة</th></tr></thead><tbody>${obsRows}</tbody></table>`:''}
 <div class="footer"><span>المراكز التأهيلية التخصصية</span><span>${new Date().toLocaleDateString('ar-SA')} — ${new Date().toLocaleTimeString('ar-SA')}</span></div>
-<script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script>
-</body></html>`
+<script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script></body></html>`
     const w = window.open('','_blank'); w.document.write(html); w.document.close()
   }
 
   return (
     <div className="animate-in">
-      {/* فلاتر */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title">🏠 تقرير جناح خلال فترة</div>
         <div className="form-row fr-3" style={{ marginBottom: 12 }}>
-          <div className="form-group">
-            <label>من تاريخ *</label>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label>إلى تاريخ *</label>
-            <input type="date" value={to}   onChange={e => setTo(e.target.value)} />
-          </div>
+          <div className="form-group"><label>من تاريخ *</label><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></div>
+          <div className="form-group"><label>إلى تاريخ *</label><input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
           <div className="form-group">
             <label>المساندة *</label>
             <select value={selMasanda} onChange={e => { setSelMasanda(e.target.value); setSelWing('') }}>
@@ -1145,15 +958,11 @@ ${obsRows ? `<div class="sec-title">📝 الملاحظات المرصودة</di
       {loading && <div style={{ height: 150 }} className="skeleton" />}
 
       {!loading && data.length === 0 && from && to && selWing && (
-        <div className="empty-state">
-          <div className="es-icon">📭</div>
-          <div className="es-title">لا توجد بيانات لهذا الجناح في الفترة المحددة</div>
-        </div>
+        <div className="empty-state"><div className="es-icon">📭</div><div className="es-title">لا توجد بيانات لهذا الجناح في الفترة المحددة</div></div>
       )}
 
       {!loading && data.length > 0 && (
         <>
-          {/* إحصاءات */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:16 }}>
             {[
               { label:'أيام مُسجَّلة',  value:data.length, color:'#1a56db', bg:'#ebf0fd' },
@@ -1168,44 +977,23 @@ ${obsRows ? `<div class="sec-title">📝 الملاحظات المرصودة</di
             ))}
           </div>
 
-          {/* ─── Chart الأعمدة ─── */}
           {data.length > 1 && (
             <div className="card" style={{ marginBottom:14 }}>
               <div className="card-title">📊 مستوى الجناح خلال الفترة</div>
               <div style={{ overflowX: 'auto' }}>
-                <div style={{
-                  display: 'flex', alignItems: 'flex-end', gap: 6,
-                  height: 180, padding: '10px 4px 0',
-                  minWidth: data.length * 48
-                }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 180, padding: '10px 4px 0', minWidth: data.length * 48 }}>
                   {data.map((w, i) => {
                     const pct = (w.totalScore / 60) * 100
                     const col = sc(pct)
-                    const bgC = bg(pct)
                     return (
                       <div key={i} style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1, minWidth:40, gap:4 }}>
-                        {/* القيمة فوق العمود */}
                         <div style={{ fontSize:11, fontWeight:800, color:col }}>{w.totalScore}</div>
-                        {/* العمود */}
-                        <div style={{
-                          width:'100%', borderRadius:'4px 4px 0 0',
-                          background: col,
-                          height: `${Math.max(6, pct * 1.4)}px`,
-                          transition: 'height .4s ease',
-                          position: 'relative', cursor: 'default',
-                          minHeight: 6,
-                        }}
-                          title={`${w.date}: ${w.totalScore}/60`}
-                        />
-                        {/* التاريخ */}
-                        <div style={{ fontSize:9.5, color:'var(--text-muted)', transform:'rotate(-35deg)', transformOrigin:'top center', whiteSpace:'nowrap', marginTop:8 }}>
-                          {w.date.slice(5)}
-                        </div>
+                        <div style={{ width:'100%', borderRadius:'4px 4px 0 0', background: col, height: `${Math.max(6, pct * 1.4)}px`, transition: 'height .4s ease', minHeight: 6 }} title={`${w.date}: ${w.totalScore}/60`} />
+                        <div style={{ fontSize:9.5, color:'var(--text-muted)', transform:'rotate(-35deg)', transformOrigin:'top center', whiteSpace:'nowrap', marginTop:8 }}>{w.date.slice(5)}</div>
                       </div>
                     )
                   })}
                 </div>
-                {/* مستوى 60 */}
                 <div style={{ display:'flex', gap:12, marginTop:20, paddingTop:8, borderTop:'1px solid var(--border)', justifyContent:'center', flexWrap:'wrap' }}>
                   {[{color:'#057a55',label:'ممتاز (50+)'},{color:'#b45309',label:'متوسط (35-49)'},{color:'#c81e1e',label:'يحتاج متابعة (-35)'}].map((x,i)=>(
                     <div key={i} style={{ display:'flex', alignItems:'center', gap:5, fontSize:11 }}>
@@ -1218,7 +1006,6 @@ ${obsRows ? `<div class="sec-title">📝 الملاحظات المرصودة</di
             </div>
           )}
 
-          {/* جدول التفصيل */}
           <div className="card" style={{ marginBottom:14 }}>
             <div className="card-title">📋 تفصيل الأيام — {m?.name} / {wLabel}</div>
             <div className="table-wrap">
@@ -1227,10 +1014,7 @@ ${obsRows ? `<div class="sec-title">📝 الملاحظات المرصودة</di
                   <tr>
                     <th>التاريخ</th>
                     {AXES.map((ax,i)=><th key={i} style={{fontSize:10}}>{ax.label.replace(/[🎯🛡️💊🏠]/g,'').trim().split(' ')[0]}/15</th>)}
-                    <th>الإجمالي/60</th>
-                    <th>مستفيدون</th>
-                    <th>مخالفات</th>
-                    <th>المدخِل</th>
+                    <th>الإجمالي/60</th><th>مستفيدون</th><th>مخالفات</th><th>المدخِل</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1240,11 +1024,7 @@ ${obsRows ? `<div class="sec-title">📝 الملاحظات المرصودة</di
                       <tr key={i}>
                         <td style={{fontWeight:700}}>{w.date}</td>
                         {w.axes.map((a,ai)=><td key={ai} style={{textAlign:'center',fontSize:12}}>{a.total}</td>)}
-                        <td>
-                          <span style={{display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:12,fontWeight:800,background:bg(pct),color:sc(pct),border:`1px solid ${sc(pct)}`}}>
-                            {w.totalScore}/60
-                          </span>
-                        </td>
+                        <td><span style={{display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:12,fontWeight:800,background:bg(pct),color:sc(pct),border:`1px solid ${sc(pct)}`}}>{w.totalScore}/60</span></td>
                         <td style={{textAlign:'center',color:'#1a56db'}}>{w.beneficiaries||'—'}</td>
                         <td style={{textAlign:'center',color:'#c81e1e'}}>{w.violations||0}</td>
                         <td style={{fontSize:11,color:'var(--text-muted)'}}>{w.savedBy||'—'}</td>
@@ -1256,7 +1036,6 @@ ${obsRows ? `<div class="sec-title">📝 الملاحظات المرصودة</di
             </div>
           </div>
 
-          {/* الملاحظات */}
           {['amni','fanni','baramij'].some(k => data.some(w=>w.obs?.[k])) && (
             <div className="card">
               <div className="card-title">📝 الملاحظات المرصودة خلال الفترة</div>
@@ -1271,14 +1050,7 @@ ${obsRows ? `<div class="sec-title">📝 الملاحظات المرصودة</di
                     <div style={{fontSize:12.5,fontWeight:800,marginBottom:7,padding:'5px 10px',background:item.bg,borderRight:`4px solid ${item.border}`,borderRadius:'0 6px 6px 0'}}>{item.label}</div>
                     <div className="table-wrap"><table>
                       <thead><tr><th>التاريخ</th><th>الملاحظة</th></tr></thead>
-                      <tbody>
-                        {rows.map((w,i)=>(
-                          <tr key={i}>
-                            <td style={{fontWeight:700,whiteSpace:'nowrap'}}>{w.date}</td>
-                            <td style={{fontSize:13}}>{w.obs[item.key]}</td>
-                          </tr>
-                        ))}
-                      </tbody>
+                      <tbody>{rows.map((w,i)=><tr key={i}><td style={{fontWeight:700,whiteSpace:'nowrap'}}>{w.date}</td><td style={{fontSize:13}}>{w.obs[item.key]}</td></tr>)}</tbody>
                     </table></div>
                   </div>
                 )
@@ -1316,20 +1088,15 @@ function NeedsReport() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث باسم الصنف..." />
         </div>
       </div>
-      <ExportBar
-        count={filtered.length}
+      <ExportBar count={filtered.length}
         onExcel={() => {
           const headers = ['الصنف','المساندة','الجناح','الحد المعياري','الموجود السليم','العجز']
-          const rows = filtered.map(r => [r.itemName,
-            r.masandaId ? MASANDAT.find(m=>m.id===r.masandaId)?.name : '—',
-            isNaN(r.wing)?r.wing:`جناح ${r.wing}`, r.standard_qty, r.good_qty, r.shortage_qty])
+          const rows = filtered.map(r => [r.itemName, r.masandaId?MASANDAT.find(m=>m.id===r.masandaId)?.name:'—', isNaN(r.wing)?r.wing:`جناح ${r.wing}`, r.standard_qty, r.good_qty, r.shortage_qty])
           exportToExcel(rows, headers, 'تقرير-الاحتياج')
         }}
         onPrint={() => {
           const headers = ['الصنف','الموقع','الحد المعياري','الموجود','العجز']
-          const rows = filtered.map(r => [r.itemName,
-            (r.masandaId ? MASANDAT.find(m=>m.id===r.masandaId)?.name : '') + ' ' + (isNaN(r.wing)?r.wing:`جناح ${r.wing}`),
-            r.standard_qty, r.good_qty, `-${r.shortage_qty}`])
+          const rows = filtered.map(r => [r.itemName, (r.masandaId?MASANDAT.find(m=>m.id===r.masandaId)?.name:'')+' '+(isNaN(r.wing)?r.wing:`جناح ${r.wing}`), r.standard_qty, r.good_qty, `-${r.shortage_qty}`])
           printTable('تقرير الاحتياج', headers, rows)
         }}
       />
@@ -1343,7 +1110,7 @@ function NeedsReport() {
               {filtered.sort((a,b) => (b.shortage_qty||0)-(a.shortage_qty||0)).map((r, i) => (
                 <tr key={i}>
                   <td style={{ fontWeight: 700 }}>{r.itemName}</td>
-                  <td style={{ fontSize: 12 }}>{r.masandaId ? MASANDAT.find(m=>m.id===r.masandaId)?.name : '—'} — {isNaN(r.wing)?r.wing:`جناح ${r.wing}`}</td>
+                  <td style={{ fontSize: 12 }}>{r.masandaId?MASANDAT.find(m=>m.id===r.masandaId)?.name:'—'} — {isNaN(r.wing)?r.wing:`جناح ${r.wing}`}</td>
                   <td style={{ textAlign: 'center' }}>{r.standard_qty}</td>
                   <td style={{ textAlign: 'center', color: 'var(--green)' }}>{r.good_qty}</td>
                   <td><span className="badge badge-red">-{r.shortage_qty}</span></td>
@@ -1381,7 +1148,7 @@ function MovementsReport() {
     <div className="animate-in">
       <div className="filters-bar" style={{ marginBottom: 16 }}>
         <div className="filter-item form-group"><label>من</label><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></div>
-        <div className="filter-item form-group"><label>إلى</label><input type="date" value={to}   onChange={e => setTo(e.target.value)}   /></div>
+        <div className="filter-item form-group"><label>إلى</label><input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
         <div className="filter-item form-group">
           <label>النوع</label>
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
@@ -1391,26 +1158,15 @@ function MovementsReport() {
         </div>
         <button className="btn btn-primary" style={{ alignSelf: 'flex-end' }} onClick={load}>عرض</button>
       </div>
-      <ExportBar
-        count={data.length}
+      <ExportBar count={data.length}
         onExcel={() => {
           const headers = ['التاريخ','النوع','الصنف','الكمية','من','إلى','الحالة','أدخل']
-          const rows = data.map(r => [r.movement_date,
-            MOVEMENT_TYPES.find(t=>t.id===r.movement_type_id)?.label||r.movement_type_id,
-            r.item_name, r.qty,
-            r.from_location==='warehouse'?'المستودع':r.from_location||'',
-            r.to_location==='warehouse'?'المستودع':r.to_location||'',
-            r.status, r.created_by||''])
+          const rows = data.map(r => [r.movement_date, MOVEMENT_TYPES.find(t=>t.id===r.movement_type_id)?.label||r.movement_type_id, r.item_name, r.qty, r.from_location==='warehouse'?'المستودع':r.from_location||'', r.to_location==='warehouse'?'المستودع':r.to_location||'', r.status, r.created_by||''])
           exportToExcel(rows, headers, 'تقرير-الحركات')
         }}
         onPrint={() => {
           const headers = ['التاريخ','النوع','الصنف','الكمية','من','إلى','الحالة']
-          const rows = data.map(r => [r.movement_date,
-            MOVEMENT_TYPES.find(t=>t.id===r.movement_type_id)?.label||r.movement_type_id,
-            r.item_name, r.qty,
-            r.from_location==='warehouse'?'المستودع':r.from_location||'',
-            r.to_location==='warehouse'?'المستودع':r.to_location||'',
-            r.status])
+          const rows = data.map(r => [r.movement_date, MOVEMENT_TYPES.find(t=>t.id===r.movement_type_id)?.label||r.movement_type_id, r.item_name, r.qty, r.from_location==='warehouse'?'المستودع':r.from_location||'', r.to_location==='warehouse'?'المستودع':r.to_location||'', r.status])
           printTable('تقرير الحركات', headers, rows)
         }}
       />
@@ -1424,11 +1180,11 @@ function MovementsReport() {
               {data.map((r, i) => (
                 <tr key={i}>
                   <td style={{ fontSize: 12 }}>{r.movement_date}</td>
-                  <td style={{ fontSize: 12 }}>{MOVEMENT_TYPES.find(t=>t.id===r.movement_type_id)?.label || r.movement_type_id}</td>
+                  <td style={{ fontSize: 12 }}>{MOVEMENT_TYPES.find(t=>t.id===r.movement_type_id)?.label||r.movement_type_id}</td>
                   <td style={{ fontWeight: 700 }}>{r.item_name}</td>
                   <td><span className="badge badge-accent">{r.qty}</span></td>
-                  <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.from_location === 'warehouse' ? '🏭 المستودع' : r.from_location || '—'}</td>
-                  <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.to_location   === 'warehouse' ? '🏭 المستودع' : r.to_location   || '—'}</td>
+                  <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.from_location==='warehouse'?'🏭 المستودع':r.from_location||'—'}</td>
+                  <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.to_location==='warehouse'?'🏭 المستودع':r.to_location||'—'}</td>
                   <td><span className={`badge ${r.status==='معتمدة'?'badge-green':r.status==='معلقة'?'badge-orange':'badge-dim'}`}>{r.status}</span></td>
                 </tr>
               ))}
@@ -1470,7 +1226,7 @@ function ToolReport() {
     <div className="animate-in">
       <div className="filters-bar" style={{ marginBottom: 16 }}>
         <div className="filter-item form-group"><label>من</label><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></div>
-        <div className="filter-item form-group"><label>إلى</label><input type="date" value={to}   onChange={e => setTo(e.target.value)}   /></div>
+        <div className="filter-item form-group"><label>إلى</label><input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
         <div className="filter-item form-group">
           <label>الحالة</label>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
@@ -1480,20 +1236,15 @@ function ToolReport() {
         </div>
         <button className="btn btn-primary" style={{ alignSelf: 'flex-end' }} onClick={load}>عرض</button>
       </div>
-      <ExportBar
-        count={data.length}
+      <ExportBar count={data.length}
         onExcel={() => {
           const headers = ['التاريخ','المساندة','الجناح','الصنف','الحالة','الأولوية','الوصف','أدخل']
-          const rows = data.map(r => [r.report_date, r.masanda_name,
-            r.wing?`جناح ${r.wing}`:'', r.item_name,
-            r.status, r.priority, r.notes||r.description||'', r.created_by||''])
+          const rows = data.map(r => [r.report_date, r.masanda_name, r.wing?`جناح ${r.wing}`:'', r.item_name, r.status, r.priority, r.notes||r.description||'', r.created_by||''])
           exportToExcel(rows, headers, 'بلاغات-الأدوات')
         }}
         onPrint={() => {
           const headers = ['التاريخ','الموقع','الصنف','الحالة','الوصف']
-          const rows = data.map(r => [r.report_date,
-            r.masanda_name+' '+(r.wing?`جناح ${r.wing}`:''),
-            r.item_name, r.status, r.notes||r.description||''])
+          const rows = data.map(r => [r.report_date, r.masanda_name+' '+(r.wing?`جناح ${r.wing}`:''), r.item_name, r.status, r.notes||r.description||''])
           printTable('بلاغات أعطال الأدوات', headers, rows)
         }}
       />
@@ -1509,11 +1260,11 @@ function ToolReport() {
                 return (
                   <tr key={i}>
                     <td style={{ fontSize: 12 }}>{r.report_date}</td>
-                    <td style={{ fontSize: 12 }}>{r.masanda_name} {r.wing ? `جناح ${r.wing}` : ''}</td>
+                    <td style={{ fontSize: 12 }}>{r.masanda_name} {r.wing?`جناح ${r.wing}`:''}</td>
                     <td style={{ fontWeight: 700 }}>{r.item_name}</td>
-                    <td><span className="badge" style={{ background: st.bg || 'var(--surface3)', color: st.color || 'var(--text-muted)' }}>{r.status}</span></td>
+                    <td><span className="badge" style={{ background: st.bg||'var(--surface3)', color: st.color||'var(--text-muted)' }}>{r.status}</span></td>
                     <td style={{ fontSize: 12 }}>{r.priority}</td>
-                    <td style={{ fontSize: 12, maxWidth: 200 }}>{r.notes || r.description || '—'}</td>
+                    <td style={{ fontSize: 12, maxWidth: 200 }}>{r.notes||r.description||'—'}</td>
                     <td style={{ fontSize: 11, color: 'var(--blue)' }}>{r.created_by}</td>
                   </tr>
                 )
@@ -1533,7 +1284,6 @@ function FacilityReport() {
   const [from, setFrom] = useState('')
   const [to,   setTo]   = useState('')
   const [typeFilter, setTypeFilter] = useState('')
-
   const FAULT_TYPES = ['سباكة','كهرباء','تكييف','نجارة','دهانات','أقفال','إنارة','أخرى']
 
   const load = async () => {
@@ -1552,7 +1302,7 @@ function FacilityReport() {
     <div className="animate-in">
       <div className="filters-bar" style={{ marginBottom: 16 }}>
         <div className="filter-item form-group"><label>من</label><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></div>
-        <div className="filter-item form-group"><label>إلى</label><input type="date" value={to}   onChange={e => setTo(e.target.value)}   /></div>
+        <div className="filter-item form-group"><label>إلى</label><input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
         <div className="filter-item form-group">
           <label>نوع العطل</label>
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
@@ -1562,20 +1312,15 @@ function FacilityReport() {
         </div>
         <button className="btn btn-primary" style={{ alignSelf: 'flex-end' }} onClick={load}>عرض</button>
       </div>
-      <ExportBar
-        count={data.length}
+      <ExportBar count={data.length}
         onExcel={() => {
           const headers = ['التاريخ','المساندة','الجناح','نوع العطل','الوصف','الحالة','الجهة المنفذة','تاريخ الإنجاز']
-          const rows = data.map(r => [r.report_date, r.masanda_name,
-            r.wing?`جناح ${r.wing}`:'', r.fault_type, r.description,
-            r.status, r.assigned_to||'', r.completed_at||''])
+          const rows = data.map(r => [r.report_date, r.masanda_name, r.wing?`جناح ${r.wing}`:'', r.fault_type, r.description, r.status, r.assigned_to||'', r.completed_at||''])
           exportToExcel(rows, headers, 'بلاغات-الصيانة')
         }}
         onPrint={() => {
           const headers = ['التاريخ','الموقع','نوع العطل','الوصف','الحالة','تاريخ الإنجاز']
-          const rows = data.map(r => [r.report_date,
-            r.masanda_name+' '+(r.wing?`جناح ${r.wing}`:''),
-            r.fault_type, r.description, r.status, r.completed_at||''])
+          const rows = data.map(r => [r.report_date, r.masanda_name+' '+(r.wing?`جناح ${r.wing}`:''), r.fault_type, r.description, r.status, r.completed_at||''])
           printTable('بلاغات صيانة المرافق', headers, rows)
         }}
       />
@@ -1589,11 +1334,11 @@ function FacilityReport() {
               {data.map((r, i) => (
                 <tr key={i}>
                   <td style={{ fontSize: 12 }}>{r.report_date}</td>
-                  <td style={{ fontSize: 12 }}>{r.masanda_name} {r.wing ? `جناح ${r.wing}` : ''}</td>
+                  <td style={{ fontSize: 12 }}>{r.masanda_name} {r.wing?`جناح ${r.wing}`:''}</td>
                   <td style={{ fontWeight: 700 }}>{r.fault_type}</td>
                   <td style={{ fontSize: 12, maxWidth: 200 }}>{r.description}</td>
                   <td><span className="badge badge-blue">{r.status}</span></td>
-                  <td style={{ fontSize: 12, color: 'var(--green)' }}>{r.completed_at || '—'}</td>
+                  <td style={{ fontSize: 12, color: 'var(--green)' }}>{r.completed_at||'—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -1629,22 +1374,15 @@ function InventoryReport() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث باسم الصنف..." />
         </div>
       </div>
-      <ExportBar
-        count={filtered.length}
+      <ExportBar count={filtered.length}
         onExcel={() => {
           const headers = ['الصنف','المساندة','الجناح','سليم','معطل','تحت الصيانة','مفقود','الحد المعياري','العجز','اللجنة']
-          const rows = filtered.map(r => [r.itemName,
-            r.masandaId?MASANDAT.find(m=>m.id===r.masandaId)?.name:'—',
-            isNaN(r.wing)?r.wing:`جناح ${r.wing}`,
-            r.good_qty??0, r.faulty_qty??0, r.under_maintenance_qty??0,
-            r.missing_qty??0, r.standard_qty??'', r.shortage_qty??0, r.current_committee||''])
+          const rows = filtered.map(r => [r.itemName, r.masandaId?MASANDAT.find(m=>m.id===r.masandaId)?.name:'—', isNaN(r.wing)?r.wing:`جناح ${r.wing}`, r.good_qty??0, r.faulty_qty??0, r.under_maintenance_qty??0, r.missing_qty??0, r.standard_qty??'', r.shortage_qty??0, r.current_committee||''])
           exportToExcel(rows, headers, 'تقرير-العهدة')
         }}
         onPrint={() => {
           const headers = ['الصنف','الموقع','سليم','معطل','الحد المعياري','العجز']
-          const rows = filtered.map(r => [r.itemName,
-            (r.masandaId?MASANDAT.find(m=>m.id===r.masandaId)?.name:'') + ' ' + (isNaN(r.wing)?r.wing:`جناح ${r.wing}`),
-            r.good_qty??0, r.faulty_qty??0, r.standard_qty??'', r.shortage_qty>0?`-${r.shortage_qty}`:'✓'])
+          const rows = filtered.map(r => [r.itemName, (r.masandaId?MASANDAT.find(m=>m.id===r.masandaId)?.name:'')+' '+(isNaN(r.wing)?r.wing:`جناح ${r.wing}`), r.good_qty??0, r.faulty_qty??0, r.standard_qty??'', r.shortage_qty>0?`-${r.shortage_qty}`:'✓'])
           printTable('تقرير عهدة الأجنحة', headers, rows)
         }}
       />
@@ -1657,14 +1395,14 @@ function InventoryReport() {
             {filtered.map((r, i) => (
               <tr key={i}>
                 <td style={{ fontWeight: 700 }}>{r.itemName}</td>
-                <td style={{ fontSize: 12 }}>{r.masandaId ? MASANDAT.find(m=>m.id===r.masandaId)?.name : '—'} — {isNaN(r.wing)?r.wing:`جناح ${r.wing}`}</td>
-                <td><span className="badge badge-green">{r.good_qty ?? 0}</span></td>
-                <td style={{ color: r.faulty_qty > 0 ? 'var(--red)' : 'var(--text-muted)', fontSize: 12 }}>{r.faulty_qty ?? 0}</td>
-                <td style={{ color: 'var(--orange)', fontSize: 12 }}>{r.under_maintenance_qty ?? 0}</td>
-                <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{r.missing_qty ?? 0}</td>
-                <td style={{ fontSize: 12 }}>{r.standard_qty ?? '—'}</td>
-                <td>{r.shortage_qty > 0 ? <span className="badge badge-red">-{r.shortage_qty}</span> : <span className="badge badge-green">✓</span>}</td>
-                <td style={{ fontSize: 11, color: 'var(--blue)' }}>{r.current_committee || '—'}</td>
+                <td style={{ fontSize: 12 }}>{r.masandaId?MASANDAT.find(m=>m.id===r.masandaId)?.name:'—'} — {isNaN(r.wing)?r.wing:`جناح ${r.wing}`}</td>
+                <td><span className="badge badge-green">{r.good_qty??0}</span></td>
+                <td style={{ color: r.faulty_qty>0?'var(--red)':'var(--text-muted)', fontSize: 12 }}>{r.faulty_qty??0}</td>
+                <td style={{ color: 'var(--orange)', fontSize: 12 }}>{r.under_maintenance_qty??0}</td>
+                <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{r.missing_qty??0}</td>
+                <td style={{ fontSize: 12 }}>{r.standard_qty??'—'}</td>
+                <td>{r.shortage_qty>0?<span className="badge badge-red">-{r.shortage_qty}</span>:<span className="badge badge-green">✓</span>}</td>
+                <td style={{ fontSize: 11, color: 'var(--blue)' }}>{r.current_committee||'—'}</td>
               </tr>
             ))}
           </tbody>
