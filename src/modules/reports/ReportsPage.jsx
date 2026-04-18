@@ -228,9 +228,11 @@ const DAR_AR = ['الأحد','الاثنين','الثلاثاء','الأربعا
 function DailyReport() {
   const { name: uName } = useAuth()
   const toast = useToast()
-  const [date,    setDate]    = useState(new Date().toISOString().split('T')[0])
-  const [wings,   setWings]   = useState([])
-  const [loading, setLoading] = useState(false)
+  const [date,     setDate]     = useState(new Date().toISOString().split('T')[0])
+  const [wings,    setWings]    = useState([])
+  const [prevWings,setPrevWings] = useState([])
+  const [showPrev, setShowPrev]  = useState(false)
+  const [loading,  setLoading]   = useState(false)
 
   const load = useCallback(async () => {
     if (!date) return
@@ -239,6 +241,13 @@ function DailyReport() {
       const q = query(collection(db, 'wings'), where('date', '==', date))
       const s = await getDocs(q)
       setWings(s.docs.map(d => d.data()))
+      // جلب بيانات اليوم السابق
+      const pd = new Date(date + 'T12:00:00')
+      pd.setDate(pd.getDate() - 1)
+      const prevStr = pd.toISOString().split('T')[0]
+      const qp = query(collection(db, 'wings'), where('date', '==', prevStr))
+      const sp = await getDocs(qp)
+      setPrevWings(sp.docs.map(d => d.data()))
     } catch (e) { toast('❌ ' + e.message, 'error') }
     setLoading(false)
   }, [date, toast])
@@ -271,6 +280,9 @@ function DailyReport() {
   const worst = [...rankable].sort((a,b) => a.avg - b.avg).slice(0,3)
   const d     = new Date(date + 'T12:00:00')
   const sc    = v => v >= 83 ? '#057a55' : v >= 58 ? '#b45309' : '#c81e1e'
+  // خريطة درجات أمس
+  const prevMap = {}
+  prevWings.forEach(w => { prevMap[`${w.masandaId}_${w.wing}`] = w.totalScore })
   const bg    = v => v >= 83 ? '#e3f9ee' : v >= 58 ? '#fef3c7' : '#fde8e8'
   const pilC  = pct => pct >= 83 ? 'pill-g' : pct >= 58 ? 'pill-o' : 'pill-r'
 
@@ -349,6 +361,11 @@ ${notesHtml}
           <button className="btn btn-primary"  onClick={load}     >🔍 عرض</button>
           <button className="btn btn-outline"  onClick={doPrint}  disabled={!wings.length}>🖨️ طباعة</button>
           <button className="btn btn-green"    onClick={doExcel}  disabled={!wings.length}>📊 Excel</button>
+          <button
+            className={`btn btn-sm ${showPrev ? 'btn-blue' : 'btn-outline'}`}
+            onClick={() => setShowPrev(v => !v)}
+            disabled={!wings.length}
+          >{showPrev ? '🔵' : '⚪'} مقارنة بالأمس</button>
         </div>
       </div>
 
@@ -395,7 +412,21 @@ ${notesHtml}
                     <td style={{textAlign:'center',color:'#1a56db',fontWeight:700}}>{w.beneficiaries||'—'}</td>
                     <td style={{textAlign:'center',color:'#c81e1e',fontWeight:700}}>{w.violations||0}</td>
                     {w.axes.map((a,ai)=><td key={ai} style={{textAlign:'center',fontSize:12}}>{a.total}/15</td>)}
-                    <td><span style={{display:'inline-block',padding:'2px 10px',borderRadius:20,fontSize:12,fontWeight:800,background:bg(pct),color:sc(pct),border:`1px solid ${sc(pct)}`}}>{w.totalScore}/60</span></td>
+                    <td>
+                      <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+                        <span style={{display:'inline-block',padding:'2px 10px',borderRadius:20,fontSize:12,fontWeight:800,background:bg(pct),color:sc(pct),border:`1px solid ${sc(pct)}`}}>{w.totalScore}/60</span>
+                        {showPrev && (
+                          prevMap[`${w.masandaId}_${w.wing}`] === undefined
+                            ? <span style={{fontSize:10,color:'var(--text-dim)'}}>—</span>
+                            : <span style={{display:'inline-flex',alignItems:'center',gap:2}}>
+                                <span style={{fontSize:10,color:'var(--text-muted)'}}>({prevMap[`${w.masandaId}_${w.wing}`]})</span>
+                                <span style={{fontSize:10,fontWeight:700,color:(w.totalScore-prevMap[`${w.masandaId}_${w.wing}`])>0?'#057a55':(w.totalScore-prevMap[`${w.masandaId}_${w.wing}`])<0?'#c81e1e':'var(--text-muted)'}}>
+                                  {(w.totalScore-prevMap[`${w.masandaId}_${w.wing}`])>0?'+':''}{w.totalScore-prevMap[`${w.masandaId}_${w.wing}`]}
+                                </span>
+                              </span>
+                        )}
+                      </div>
+                    </td>
                     <td style={{fontSize:11,color:'var(--text-muted)'}}>{w.savedBy||'—'}</td>
                   </tr>)
                 })}
