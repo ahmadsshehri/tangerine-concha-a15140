@@ -37,37 +37,43 @@ const ALL_PERMISSIONS = [
   {
     group: '🔧 البلاغات والتقارير',
     perms: [
-      { key: 'reports_daily',    label: 'عرض التقرير اليومي وطباعته' },
-      { key: 'reports_tool',     label: 'رفع بلاغات أعطال الأدوات' },
-      { key: 'reports_facility', label: 'رفع بلاغات صيانة المرافق' },
-      { key: 'reports_view_all', label: 'عرض جميع البلاغات والتقارير' },
-      { key: 'reports_followup', label: 'إضافة إجراءات متابعة' },
+      { key: 'reports_daily',         label: 'عرض التقرير اليومي وطباعته' },
+      { key: 'reports_tool',          label: 'رفع بلاغات أعطال الأدوات' },
+      { key: 'reports_facility',      label: 'رفع بلاغات صيانة المرافق' },
+      { key: 'reports_view_all',      label: 'عرض جميع البلاغات والتقارير' },
+      { key: 'reports_followup',      label: 'إضافة إجراءات متابعة' },
+    ]
+  },
+  {
+    group: '👤 إدارة المستخدمين',
+    perms: [
+      { key: 'can_create_supervisors', label: 'إنشاء حسابات مشرفين جديدة' },
     ]
   },
 ]
 
 // الصلاحيات الافتراضية لحساب مشرف جديد
 const DEFAULT_SUPERVISOR_PERMS = {
-  supervisor_entry:   true,
-  supervisor_delete:  false,
-  supervisor_reports: true,
-  caretaker_entry:    true,
-  caretaker_delete:   false,
-  caretaker_reports:  true,
-  custody_view:       false,
-  custody_movements:  false,
-  custody_items:      false,
-  custody_warehouse:  false,
-  custody_committees: false,
-  custody_reports:    false,
-  reports_daily:      true,
-  reports_tool:       true,
-  reports_facility:   true,
-  reports_view_all:   false,
-  reports_followup:   false,
+  supervisor_entry:        true,
+  supervisor_delete:       false,
+  supervisor_reports:      true,
+  caretaker_entry:         true,
+  caretaker_delete:        false,
+  caretaker_reports:       true,
+  custody_view:            false,
+  custody_movements:       false,
+  custody_items:           false,
+  custody_warehouse:       false,
+  custody_committees:      false,
+  custody_reports:         false,
+  reports_daily:           true,
+  reports_tool:            true,
+  reports_facility:        true,
+  reports_view_all:        false,
+  reports_followup:        false,
+  can_create_supervisors:  false,
 }
 
-// ─── Hook للتحقق من صلاحية معينة ──────────────────────────────────────────────
 export function usePermission(key) {
   const { role, permissions } = useAuth()
   if (role === 'admin') return true
@@ -75,14 +81,17 @@ export function usePermission(key) {
 }
 
 export default function AdminPage() {
-  const { isAdmin } = useAuth()
+  const { user: currentUser, isAdmin, hasPerm } = useAuth()
   const toast = useToast()
-  const [users,      setUsers]      = useState([])
-  const [loading,    setLoading]    = useState(false)
-  const [addModal,   setAddModal]   = useState(false)
-  const [permModal,  setPermModal]  = useState(null) // user object
-  const [form,       setForm]       = useState({ name: '', email: '', password: '' })
-  const [saving,     setSaving]     = useState(false)
+  const [users,     setUsers]     = useState([])
+  const [loading,   setLoading]   = useState(false)
+  const [addModal,  setAddModal]  = useState(false)
+  const [permModal, setPermModal] = useState(null)
+  const [form,      setForm]      = useState({ name: '', email: '', password: '' })
+  const [saving,    setSaving]    = useState(false)
+
+  // المشرف يمكنه الدخول إذا كان مديراً أو لديه صلاحية إنشاء مشرفين
+  const canManageUsers = isAdmin || hasPerm('can_create_supervisors')
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
@@ -93,9 +102,9 @@ export default function AdminPage() {
     setLoading(false)
   }, [toast])
 
-  useEffect(() => { if (isAdmin) fetchUsers() }, [isAdmin, fetchUsers])
+  useEffect(() => { if (canManageUsers) fetchUsers() }, [canManageUsers, fetchUsers])
 
-  if (!isAdmin) return (
+  if (!canManageUsers) return (
     <div className="animate-in">
       <div className="empty-state">
         <div className="es-icon">🔒</div>
@@ -130,12 +139,32 @@ export default function AdminPage() {
     setSaving(false)
   }
 
-  // ─ حذف مستخدم
+  // ─ حذف مستخدم (مشرف أو مدير)
   const delUser = async (user) => {
-    if (!confirm(`حذف "${user.name}" من النظام؟`)) return
+    if (!isAdmin) { toast('❌ هذه الصلاحية للمديرين فقط', 'error'); return }
+    const label = user.role === 'admin' ? 'المدير' : 'المشرف'
+    if (!confirm(`حذف حساب ${label} "${user.name}" من النظام نهائياً؟`)) return
     try {
       await deleteDoc(doc(db, 'users', user.id))
       toast('🗑️ تم الحذف')
+      fetchUsers()
+    } catch (e) { toast('❌ ' + e.message, 'error') }
+  }
+
+  // ─ تحويل مدير إلى مشرف
+  const demoteAdmin = async (user) => {
+    if (!isAdmin) { toast('❌ هذه الصلاحية للمديرين فقط', 'error'); return }
+    if (user.id === currentUser?.uid) {
+      toast('⚠️ لا يمكنك تحويل حسابك الحالي إلى مشرف', 'warn'); return
+    }
+    if (!confirm(`تحويل "${user.name}" من مدير إلى مشرف؟ سيفقد صلاحيات المدير.`)) return
+    try {
+      await setDoc(doc(db, 'users', user.id), {
+        ...user,
+        role: 'supervisor',
+        permissions: DEFAULT_SUPERVISOR_PERMS,
+      }, { merge: false })
+      toast('✅ تم تحويل الحساب إلى مشرف')
       fetchUsers()
     } catch (e) { toast('❌ ' + e.message, 'error') }
   }
@@ -148,7 +177,7 @@ export default function AdminPage() {
       <div className="page-header">
         <div className="page-title">
           <div className="icon" style={{ background: 'rgba(227,179,65,.15)' }}>⚙️</div>
-          إدارة المستخدمين والصلاحيات
+          {isAdmin ? 'إدارة المستخدمين والصلاحيات' : 'إضافة حسابات مشرفين'}
         </div>
         <button className="btn btn-primary" onClick={() => setAddModal(true)}>+ مشرف جديد</button>
       </div>
@@ -169,28 +198,49 @@ export default function AdminPage() {
       </div>
 
       {/* ─ المديرون */}
-      {admins.length > 0 && (
+      {isAdmin && admins.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-title">👑 المديرون — صلاحيات كاملة</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {admins.map(u => (
-              <div key={u.id} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '10px 14px', background: 'rgba(227,179,65,.08)',
-                border: '1px solid rgba(227,179,65,.3)', borderRadius: 'var(--rs)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 14 }}>
-                    {u.name?.charAt(0)}
+            {admins.map(u => {
+              const isMe = u.id === currentUser?.uid
+              return (
+                <div key={u.id} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 14px', background: 'rgba(227,179,65,.08)',
+                  border: '1px solid rgba(227,179,65,.3)', borderRadius: 'var(--rs)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 14 }}>
+                      {u.name?.charAt(0)}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>
+                        {u.name}
+                        {isMe && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 6 }}>(أنت)</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{u.email}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{u.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{u.email}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="role-badge role-admin">مدير — كل الصلاحيات</span>
+                    {!isMe && (
+                      <>
+                        <button
+                          className="btn btn-outline btn-xs"
+                          onClick={() => demoteAdmin(u)}
+                          title="تحويل إلى مشرف"
+                          style={{ fontSize: 11 }}
+                        >
+                          ↓ تحويل لمشرف
+                        </button>
+                        <button className="btn btn-danger btn-xs" onClick={() => delUser(u)}>حذف</button>
+                      </>
+                    )}
                   </div>
                 </div>
-                <span className="role-badge role-admin">مدير — كل الصلاحيات</span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
@@ -209,8 +259,9 @@ export default function AdminPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {supervisors.map(user => {
               const perms = user.permissions || DEFAULT_SUPERVISOR_PERMS
-              const enabledCount = Object.values(perms).filter(Boolean).length
-              const totalCount   = Object.keys(DEFAULT_SUPERVISOR_PERMS).length
+              const allKeys = ALL_PERMISSIONS.flatMap(g => g.perms).map(p => p.key)
+              const enabledCount = allKeys.filter(k => perms[k]).length
+              const totalCount   = allKeys.length
               return (
                 <div key={user.id} style={{
                   border: '1px solid var(--border)', borderRadius: 'var(--r)',
@@ -228,16 +279,17 @@ export default function AdminPage() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {/* مؤشر الصلاحيات */}
                       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                         <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{enabledCount}</span>/{totalCount} صلاحية
                       </div>
                       <div style={{ width: 80, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
                         <div style={{ height: '100%', borderRadius: 3, background: 'var(--accent)', width: `${(enabledCount/totalCount)*100}%`, transition: 'width .3s' }} />
                       </div>
-                      <button className="btn btn-blue btn-sm" onClick={() => setPermModal(user)}>
-                        🔑 الصلاحيات
-                      </button>
+                      {isAdmin && (
+                        <button className="btn btn-blue btn-sm" onClick={() => setPermModal(user)}>
+                          🔑 الصلاحيات
+                        </button>
+                      )}
                       <button className="btn btn-danger btn-xs" onClick={() => delUser(user)}>حذف</button>
                     </div>
                   </div>
@@ -286,7 +338,8 @@ export default function AdminPage() {
                   <input type="password" value={form.password} onChange={e => f({ password: e.target.value })} placeholder="6 أحرف على الأقل" />
                 </div>
                 <div style={{ padding: '10px 14px', background: 'var(--blue-dim)', borderRadius: 'var(--rs)', fontSize: 12, color: 'var(--blue)' }}>
-                  💡 سيتم إنشاء الحساب بالصلاحيات الافتراضية — يمكنك تعديلها بعد الإنشاء
+                  💡 سيتم إنشاء الحساب بالصلاحيات الافتراضية
+                  {isAdmin && ' — يمكنك تعديلها بعد الإنشاء'}
                 </div>
               </div>
             </div>
@@ -300,8 +353,8 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ─ نافذة تعديل الصلاحيات */}
-      {permModal && (
+      {/* ─ نافذة تعديل الصلاحيات (للمدير فقط) */}
+      {permModal && isAdmin && (
         <PermissionsModal
           user={permModal}
           onClose={() => setPermModal(null)}
@@ -382,10 +435,7 @@ function PermissionsModal({ user, onClose, onSaved }) {
               const allOff = groupEnabled === 0
 
               return (
-                <div key={gi} style={{
-                  border: '1px solid var(--border)', borderRadius: 'var(--r)',
-                  overflow: 'hidden'
-                }}>
+                <div key={gi} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r)', overflow: 'hidden' }}>
                   {/* رأس المجموعة */}
                   <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -422,13 +472,9 @@ function PermissionsModal({ user, onClose, onSaved }) {
                         border: `1px solid ${perms[p.key] ? 'rgba(5,122,85,.3)' : 'transparent'}`,
                         transition: 'all .15s'
                       }}>
-                        <span style={{
-                          fontSize: 13, fontWeight: 600,
-                          color: perms[p.key] ? 'var(--green)' : 'var(--text-muted)'
-                        }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: perms[p.key] ? 'var(--green)' : 'var(--text-muted)' }}>
                           {p.label}
                         </span>
-                        {/* Toggle Switch */}
                         <div
                           onClick={() => toggle(p.key)}
                           style={{
