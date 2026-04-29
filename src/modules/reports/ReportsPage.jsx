@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
 import { MASANDAT, AXES, MOVEMENT_TYPES, TOOL_REPORT_STATUSES, FACILITY_REPORT_STATUSES } from '../../lib/constants'
 import SupervisorBiasReport from './SupervisorBiasReport'
+import MonthlyReport from './MonthlyReport'
 
 // ─── تصدير Excel ──────────────────────────────────────────────────────────────
 function exportToExcel(rows, headers, filename) {
@@ -60,9 +61,10 @@ function ExportBar({ onPrint, onExcel, count }) {
   )
 }
 
-// ─── التبويبات — أضفنا supervisor_bias للمدير فقط ────────────────────────────
+// ─── التبويبات ────────────────────────────────────────────────────────────────
 const ALL_REPORT_TABS = [
   { id: 'daily',           label: '📊 التقرير اليومي',   perm: 'reports_daily',      adminOnly: false },
+  { id: 'monthly',         label: '📅 التقرير الشهري',   perm: 'reports_daily',      adminOnly: false },
   { id: 'wing',            label: '🏠 تقرير الجناح',     perm: 'supervisor_reports', adminOnly: false },
   { id: 'supervisor',      label: '🌙 ملاحظات المشرفين', perm: 'supervisor_reports', adminOnly: false },
   { id: 'caretaker',       label: '📋 تقارير القيّمين',  perm: 'caretaker_reports',  adminOnly: false },
@@ -106,6 +108,7 @@ export default function ReportsPage() {
         ))}
       </div>
       {activeTab === 'daily'           && <DailyReport />}
+      {activeTab === 'monthly'         && <MonthlyReport />}
       {activeTab === 'wing'            && <WingReport />}
       {activeTab === 'supervisor'      && <SupervisorReport />}
       {activeTab === 'caretaker'       && <CaretakerReport />}
@@ -241,7 +244,6 @@ function DailyReport() {
       const q = query(collection(db, 'wings'), where('date', '==', date))
       const s = await getDocs(q)
       setWings(s.docs.map(d => d.data()))
-      // جلب بيانات اليوم السابق
       const pd = new Date(date + 'T12:00:00')
       pd.setDate(pd.getDate() - 1)
       const prevStr = pd.toISOString().split('T')[0]
@@ -280,7 +282,6 @@ function DailyReport() {
   const worst = [...rankable].sort((a,b) => a.avg - b.avg).slice(0,3)
   const d     = new Date(date + 'T12:00:00')
   const sc    = v => v >= 83 ? '#057a55' : v >= 58 ? '#b45309' : '#c81e1e'
-  // خريطة درجات أمس
   const prevMap = {}
   prevWings.forEach(w => { prevMap[`${w.masandaId}_${w.wing}`] = w.totalScore })
   const bg    = v => v >= 83 ? '#e3f9ee' : v >= 58 ? '#fef3c7' : '#fde8e8'
