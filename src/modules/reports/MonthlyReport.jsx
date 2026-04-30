@@ -481,7 +481,22 @@ export default function MonthlyReport() {
       rows: supRows
     })
 
-    // ورقة 5: جميع السجلات
+    // ورقة 5: الملاحظات المرصودة
+    const obsRows = []
+    records.forEach(r => {
+      if (r.obs?.amni)    obsRows.push([r.date, r.masandaName, isNaN(r.wing)?r.wing:`جناح ${r.wing}`, 'أمني',    r.obs.amni,    r.savedBy||''])
+      if (r.obs?.fanni)   obsRows.push([r.date, r.masandaName, isNaN(r.wing)?r.wing:`جناح ${r.wing}`, 'فني',     r.obs.fanni,   r.savedBy||''])
+      if (r.obs?.baramij) obsRows.push([r.date, r.masandaName, isNaN(r.wing)?r.wing:`جناح ${r.wing}`, 'برامج',   r.obs.baramij, r.savedBy||''])
+    })
+    if (obsRows.length) {
+      sheets.push({
+        name: 'الملاحظات المرصودة',
+        headers: ['التاريخ', 'المساندة', 'الجناح', 'نوع الملاحظة', 'الملاحظة', 'المشرف'],
+        rows: obsRows
+      })
+    }
+
+    // ورقة 6: جميع السجلات
     sheets.push({
       name: 'جميع السجلات',
       headers: ['التاريخ', 'المساندة', 'الجناح', 'الالتزام', 'السلوك', 'التفاعل', 'السكن', 'الإجمالي', 'المستفيدون', 'المخالفات', 'المدخِل'],
@@ -577,13 +592,21 @@ export default function MonthlyReport() {
             ))}
           </div>
 
-          {/* ── تبويبان */}
+          {/* ── تبويبات */}
           <div className="tabs" style={{ marginBottom: 16 }}>
             <button className={`tab-btn ${tab==='centers'?'active':''}`} onClick={()=>{setTab('centers');setLevel(0);setSelMasanda(null)}}>
               🏢 المراكز والأجنحة
             </button>
             <button className={`tab-btn ${tab==='supervisors'?'active':''}`} onClick={()=>setTab('supervisors')}>
               👤 أداء المشرفين
+            </button>
+            <button className={`tab-btn ${tab==='observations'?'active':''}`} onClick={()=>setTab('observations')}>
+              📝 الملاحظات المرصودة
+              {records.some(r=>r.obs?.amni||r.obs?.fanni||r.obs?.baramij) && (
+                <span style={{ marginRight: 5, background: '#c81e1e', color: '#fff', borderRadius: 20, fontSize: 10, padding: '1px 6px', fontWeight: 800 }}>
+                  {records.filter(r=>r.obs?.amni||r.obs?.fanni||r.obs?.baramij).length}
+                </span>
+              )}
             </button>
           </div>
 
@@ -661,8 +684,186 @@ export default function MonthlyReport() {
           {tab === 'supervisors' && (
             <SupervisorsTab records={records} />
           )}
+
+          {tab === 'observations' && (
+            <ObservationsTab records={records} />
+          )}
         </>
       )}
+    </div>
+  )
+}
+
+// ─── تبويب الملاحظات المرصودة ────────────────────────────────────────────────
+function ObservationsTab({ records }) {
+  const [filter, setFilter] = useState('all')
+  const [search, setSearch] = useState('')
+
+  const OBS_TYPES = [
+    { key: 'all',     label: 'الكل',    icon: '📝', color: 'var(--accent)' },
+    { key: 'amni',    label: 'أمني',    icon: '🛡️', color: '#c81e1e' },
+    { key: 'fanni',   label: 'فني',     icon: '🔧', color: '#b45309' },
+    { key: 'baramij', label: 'برامج',   icon: '📚', color: '#057a55' },
+  ]
+
+  const OBS_STYLE = {
+    amni:    { label: '🛡️ ملاحظة أمنية',  color: '#c81e1e', bg: '#fde8e8', border: '#f5a3a3' },
+    fanni:   { label: '🔧 ملاحظة فنية',   color: '#b45309', bg: '#fef3c7', border: '#fbbf24' },
+    baramij: { label: '📚 ملاحظة برامج',  color: '#057a55', bg: '#e3f9ee', border: '#86d7b0' },
+  }
+
+  // قائمة مسطّحة لكل الملاحظات
+  const allObs = []
+  records.forEach(r => {
+    ['amni','fanni','baramij'].forEach(k => {
+      if (r.obs?.[k]) allObs.push({
+        date: r.date, masanda: r.masandaName, masandaId: r.masandaId,
+        wing: r.wing, type: k, text: r.obs[k],
+        supervisor: r.savedBy || '—', score: r.totalScore,
+      })
+    })
+  })
+  allObs.sort((a,b) => b.date > a.date ? 1 : -1)
+
+  const counts = {
+    amni:    allObs.filter(o=>o.type==='amni').length,
+    fanni:   allObs.filter(o=>o.type==='fanni').length,
+    baramij: allObs.filter(o=>o.type==='baramij').length,
+  }
+
+  const filtered = allObs.filter(o => {
+    if (filter !== 'all' && o.type !== filter) return false
+    if (search && !o.text.includes(search) && !o.masanda.includes(search)) return false
+    return true
+  })
+
+  // تجميع حسب المساندة
+  const byMasanda = {}
+  filtered.forEach(o => {
+    if (!byMasanda[o.masanda]) byMasanda[o.masanda] = []
+    byMasanda[o.masanda].push(o)
+  })
+
+  if (!allObs.length) return (
+    <div className="empty-state">
+      <div className="es-icon">📭</div>
+      <div className="es-title">لا توجد ملاحظات مرصودة هذا الشهر</div>
+    </div>
+  )
+
+  return (
+    <div>
+      {/* إحصاءات */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
+        {[
+          { label: 'إجمالي الملاحظات', value: allObs.length,  icon: '📝', color: 'var(--accent)' },
+          { label: 'ملاحظات أمنية',    value: counts.amni,    icon: '🛡️', color: '#c81e1e' },
+          { label: 'ملاحظات فنية',     value: counts.fanni,   icon: '🔧', color: '#b45309' },
+          { label: 'ملاحظات برامج',    value: counts.baramij, icon: '📚', color: '#057a55' },
+        ].map((s,i) => (
+          <div key={i} className="stat-card" style={{ '--card-accent': s.color }}>
+            <div className="stat-icon">{s.icon}</div>
+            <div className="stat-value">{s.value}</div>
+            <div className="stat-label">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* فلتر + بحث */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {OBS_TYPES.map(t => (
+            <button key={t.key} onClick={() => setFilter(t.key)} style={{
+              padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+              fontFamily: 'Cairo', fontSize: 12, fontWeight: 700,
+              background: filter === t.key ? t.color : 'var(--surface3)',
+              color: filter === t.key ? '#fff' : 'var(--text-muted)',
+              transition: 'all .15s'
+            }}>
+              {t.icon} {t.label}
+              <span style={{ marginRight: 4, opacity: .8 }}>
+                ({t.key === 'all' ? allObs.length : counts[t.key] || 0})
+              </span>
+            </button>
+          ))}
+        </div>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="🔍 بحث في الملاحظات أو المساندة..."
+          style={{
+            flex: 1, minWidth: 180, padding: '7px 12px',
+            background: 'var(--surface2)', border: '1.5px solid var(--border)',
+            borderRadius: 'var(--rs)', fontFamily: 'Cairo', fontSize: 13,
+            color: 'var(--text)', direction: 'rtl'
+          }}
+        />
+      </div>
+
+      {filtered.length === 0 && (
+        <div className="empty-state"><div className="es-icon">🔍</div><div className="es-title">لا توجد نتائج</div></div>
+      )}
+
+      {/* الملاحظات مجمّعة حسب المساندة */}
+      {Object.entries(byMasanda).map(([masanda, obs]) => (
+        <div key={masanda} className="card" style={{ marginBottom: 14 }}>
+          {/* رأس المساندة */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid var(--border)'
+          }}>
+            <div style={{ fontWeight: 800, fontSize: 15 }}>🏢 {masanda}</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {['amni','fanni','baramij'].map(k => {
+                const cnt = obs.filter(o=>o.type===k).length
+                if (!cnt) return null
+                const s = OBS_STYLE[k]
+                return (
+                  <span key={k} style={{ padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>
+                    {k==='amni'?'🛡️':k==='fanni'?'🔧':'📚'} {cnt}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* الملاحظات */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {obs.map((o, i) => {
+              const s = OBS_STYLE[o.type]
+              const wLabel = isNaN(o.wing) ? o.wing : `جناح ${o.wing}`
+              const pct = (o.score / 60) * 100
+              const sc = pct >= 83 ? '#057a55' : pct >= 58 ? '#b45309' : '#c81e1e'
+              return (
+                <div key={i} style={{
+                  display: 'grid', gridTemplateColumns: '1fr auto',
+                  gap: 12, alignItems: 'start',
+                  background: s.bg, border: `1px solid ${s.border}`,
+                  borderRadius: 'var(--rs)', padding: '12px 14px',
+                  borderRight: `4px solid ${s.color}`
+                }}>
+                  <div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: s.color }}>{s.label}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700 }}>— {wLabel}</span>
+                      <span className="badge badge-dim" style={{ fontSize: 10 }}>{o.date}</span>
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.8 }}>{o.text}</div>
+                  </div>
+                  <div style={{ textAlign: 'left', flexShrink: 0 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{o.supervisor}</div>
+                    <span style={{
+                      display: 'inline-block', padding: '2px 8px', borderRadius: 20,
+                      fontSize: 12, fontWeight: 800,
+                      background: sc + '18', color: sc, border: `1px solid ${sc}44`
+                    }}>{o.score}/60</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
