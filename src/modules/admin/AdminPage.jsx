@@ -15,6 +15,14 @@ const ALL_PERMISSIONS = [
       { key: 'supervisor_reports', label: 'عرض تقارير المشرفين' },
     ]
   },
+   {
+    group: '🏠 تقرير مشرف السكن',
+    perms: [
+      { key: 'housing_entry',   label: 'إدخال تقرير مشرف السكن' },
+      { key: 'housing_delete',  label: 'حذف تقارير مشرف السكن' },
+      { key: 'housing_reports', label: 'عرض تقارير مشرف السكن' },
+    ]
+  },
   {
     group: '📊 تقييم القيّمين',
     perms: [
@@ -72,6 +80,9 @@ const DEFAULT_SUPERVISOR_PERMS = {
   reports_view_all:        false,
   reports_followup:        false,
   can_create_supervisors:  false,
+   housing_entry:   true,
+  housing_delete:  false,
+  housing_reports: true,
 }
 
 export function usePermission(key) {
