@@ -9,6 +9,7 @@ import CustodyPage    from './modules/custody/CustodyPage'
 import ReportsPage    from './modules/reports/ReportsPage'
 import AdminPage      from './modules/admin/AdminPage'
 import MyReportsPage  from './modules/maintenance/MyReportsPage'
+import HousingReportPage from './modules/housing/HousingReportPage'
 
 // ─── شاشة رفض الوصول ──────────────────────────────────────────────────────────
 function AccessDenied() {
@@ -30,6 +31,7 @@ function AppShell() {
     if (isAdmin) return 'supervisor'
     if (hasPerm('supervisor_entry') || hasPerm('supervisor_reports')) return 'supervisor'
     if (hasPerm('caretaker_entry')  || hasPerm('caretaker_reports'))  return 'caretaker'
+    if (hasPerm('housing_entry') || hasPerm('housing_reports')) return 'housing'
     if (hasPerm('custody_view'))    return 'custody'
     if (hasPerm('reports_daily') || hasPerm('reports_view_all')) return 'reports'
     if (hasPerm('reports_tool') || hasPerm('reports_facility'))  return 'myreports'
@@ -62,6 +64,7 @@ function AppShell() {
                                 hasPerm('caretaker_reports') || hasPerm('custody_reports') ||
                                 hasPerm('reports_view_all')
       case 'myreports':  return hasPerm('reports_tool') || hasPerm('reports_facility')
+        case 'housing': return hasPerm('housing_entry') || hasPerm('housing_reports')
       case 'admin':      return isAdmin
       default:           return false
     }
@@ -75,6 +78,7 @@ function AppShell() {
       case 'custody':    return <CustodyPage />
       case 'reports':    return <ReportsPage />
       case 'myreports':  return <MyReportsPage />
+        case 'housing': return <HousingReportPage />
       case 'admin':      return <AdminPage />
       default:           return <AccessDenied />
     }
