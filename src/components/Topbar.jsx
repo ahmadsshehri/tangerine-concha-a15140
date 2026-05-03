@@ -12,6 +12,8 @@ export default function Topbar({ activePage, onNav }) {
       ? { id: 'supervisor', label: 'تقييم مسائي',    icon: '🌙' } : null,
     hasPerm('caretaker_entry') || hasPerm('caretaker_reports')
       ? { id: 'caretaker',  label: 'تقييم القيّمين', icon: '📊' } : null,
+      hasPerm('housing_entry') || hasPerm('housing_reports')
+      ? { id: 'housing', label: 'تقرير السكن', icon: '🏠' } : null,
     hasPerm('custody_view') || isAdmin
       ? { id: 'custody',    label: 'إدارة العهدة',   icon: '📦' } : null,
     (hasPerm('reports_tool') || hasPerm('reports_facility')) && !isAdmin
