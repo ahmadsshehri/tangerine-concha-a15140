@@ -22,23 +22,8 @@ function AccessDenied() {
   )
 }
 
-// ─── شاشة بدون صلاحيات ────────────────────────────────────────────────────────
-function NoAccess() {
-  const { logout } = useAuth()
-  return (
-    <div className="empty-state" style={{ paddingTop: 80 }}>
-      <div className="es-icon">🔒</div>
-      <div className="es-title">لا توجد صلاحيات مخصصة لحسابك</div>
-      <div className="es-sub">تواصل مع المدير لمنحك الصلاحيات المناسبة</div>
-      <button className="btn btn-outline" style={{ marginTop: 20 }} onClick={logout}>
-        🚪 تسجيل الخروج
-      </button>
-    </div>
-  )
-}
-
 function AppShell() {
-  const { user, loading, permissionsLoaded, isAdmin, hasPerm } = useAuth()
+  const { user, loading, permissionsLoaded, isAdmin, hasPerm, logout } = useAuth()
   const [page, setPage] = useState(null)
 
   // إعادة الصفحة لافتراضية عند تغيّر المستخدم فقط
@@ -76,23 +61,33 @@ function AppShell() {
   }
 
   // ─── شاشة التحميل ─────────────────────────────────────────────────────────
-  const spinner = (
+  const Spinner = () => (
     <div className="loading-overlay" style={{ display: 'flex' }}>
       <div className="spinner" />
     </div>
   )
 
-  if (loading) return spinner
-  if (!user)   return <LoginScreen />
-
-  // انتظر حتى تتحمل الصلاحيات من Firestore قبل ما نحدد الصفحة
-  if (!permissionsLoaded) return spinner
+  if (loading)             return <Spinner />
+  if (!user)               return <LoginScreen />
+  if (!permissionsLoaded)  return <Spinner />
 
   const activePage = page || getDefaultPage()
 
   const renderPage = () => {
-    if (activePage === '__no_access__') return <NoAccess />
-    if (!canAccess(activePage))         return <AccessDenied />
+    // بدون صلاحيات
+    if (activePage === '__no_access__') {
+      return (
+        <div className="empty-state" style={{ paddingTop: 80 }}>
+          <div className="es-icon">🔒</div>
+          <div className="es-title">لا توجد صلاحيات مخصصة لحسابك</div>
+          <div className="es-sub">تواصل مع المدير لمنحك الصلاحيات المناسبة</div>
+          <button className="btn btn-outline" style={{ marginTop: 20 }} onClick={logout}>
+            🚪 تسجيل الخروج
+          </button>
+        </div>
+      )
+    }
+    if (!canAccess(activePage)) return <AccessDenied />
     switch (activePage) {
       case 'supervisor': return <SupervisorPage />
       case 'caretaker':  return <CaretakerPage />
