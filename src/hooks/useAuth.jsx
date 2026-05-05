@@ -6,15 +6,14 @@ import { auth, db } from '../lib/firebase'
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [user,             setUser]             = useState(null)
-  const [role,             setRole]             = useState(null)
-  const [name,             setName]             = useState(null)
-  const [permissions,      setPermissions]      = useState({})
+  const [user,              setUser]              = useState(null)
+  const [role,              setRole]              = useState(null)
+  const [name,              setName]              = useState(null)
+  const [permissions,       setPermissions]       = useState({})
   const [permissionsLoaded, setPermissionsLoaded] = useState(false)
-  const [loading,          setLoading]          = useState(true)
+  const [loading,           setLoading]           = useState(true)
   const refreshTimerRef = useRef(null)
 
-  // ── جلب بيانات المستخدم من Firestore مع إعادة المحاولة
   const fetchUserData = async (firebaseUser, retries = 3) => {
     for (let i = 0; i < retries; i++) {
       try {
@@ -34,7 +33,6 @@ export function AuthProvider({ children }) {
     return 'error'
   }
 
-  // ── جدولة تجديد تلقائي للـ token كل 55 دقيقة
   const scheduleTokenRefresh = (firebaseUser) => {
     if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
     refreshTimerRef.current = setInterval(async () => {
@@ -45,6 +43,7 @@ export function AuthProvider({ children }) {
           setRole(data.role)
           setName(data.name)
           setPermissions(data.permissions || {})
+          // لا نعيد permissionsLoaded لـ false هنا أبداً
         }
       } catch (err) {
         console.error('Token refresh failed:', err)
@@ -55,20 +54,22 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // أعد تعيين permissionsLoaded عند كل login جديد
-        setPermissionsLoaded(false)
-
         const data = await fetchUserData(firebaseUser)
 
         if (data === null) {
+          // المستخدم غير موجود في قاعدة البيانات
           if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
+          setPermissionsLoaded(false)
           await signOut(auth)
         } else if (data === 'error') {
+          // خطأ في الجلب — افتح الموقع بصلاحيات فارغة
           setUser(firebaseUser)
-          setPermissionsLoaded(true) // حتى في حالة الخطأ نفتح الموقع
+          setPermissions({})
+          setPermissionsLoaded(true)
           setLoading(false)
           scheduleTokenRefresh(firebaseUser)
         } else {
+          // نجاح — حدّث كل البيانات دفعة واحدة
           setUser(firebaseUser)
           setRole(data.role)
           setName(data.name)
@@ -78,6 +79,7 @@ export function AuthProvider({ children }) {
           scheduleTokenRefresh(firebaseUser)
         }
       } else {
+        // تسجيل خروج
         if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
         setUser(null)
         setRole(null)
