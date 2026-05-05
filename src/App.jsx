@@ -11,7 +11,6 @@ import AdminPage         from './modules/admin/AdminPage'
 import MyReportsPage     from './modules/maintenance/MyReportsPage'
 import HousingReportPage from './modules/housing/HousingReportPage'
 
-// ─── شاشة رفض الوصول ──────────────────────────────────────────────────────────
 function AccessDenied() {
   return (
     <div className="empty-state" style={{ paddingTop: 80 }}>
@@ -26,7 +25,7 @@ function AppShell() {
   const { user, loading, permissionsLoaded, isAdmin, hasPerm, logout } = useAuth()
   const [page, setPage] = useState(null)
 
-  // إعادة الصفحة لافتراضية عند تغيّر المستخدم فقط
+  // إعادة الصفحة للافتراضية فقط عند تغيّر المستخدم
   const userId = user?.uid || null
   useEffect(() => { setPage(null) }, [userId])
 
@@ -43,7 +42,7 @@ function AppShell() {
     return '__no_access__'
   }
 
-  // ─── هل الصفحة المطلوبة مسموح بها؟ ──────────────────────────────────────
+  // ─── هل الصفحة مسموح بها؟ ────────────────────────────────────────────────
   const canAccess = (p) => {
     if (isAdmin) return true
     switch (p) {
@@ -61,27 +60,36 @@ function AppShell() {
   }
 
   // ─── شاشة التحميل ─────────────────────────────────────────────────────────
-  const Spinner = () => (
+  if (loading) return (
     <div className="loading-overlay" style={{ display: 'flex' }}>
       <div className="spinner" />
     </div>
   )
 
-  if (loading)             return <Spinner />
-  if (!user)               return <LoginScreen />
-  if (!permissionsLoaded)  return <Spinner />
+  if (!user) return <LoginScreen />
 
+  // انتظر تحميل الصلاحيات من Firestore — مرة واحدة فقط عند أول دخول
+  if (!permissionsLoaded) return (
+    <div className="loading-overlay" style={{ display: 'flex' }}>
+      <div className="spinner" />
+    </div>
+  )
+
+  // ─── بعد ما تتحمل الصلاحيات، كل شيء ثابت ────────────────────────────────
   const activePage = page || getDefaultPage()
 
   const renderPage = () => {
-    // بدون صلاحيات
     if (activePage === '__no_access__') {
       return (
         <div className="empty-state" style={{ paddingTop: 80 }}>
           <div className="es-icon">🔒</div>
           <div className="es-title">لا توجد صلاحيات مخصصة لحسابك</div>
           <div className="es-sub">تواصل مع المدير لمنحك الصلاحيات المناسبة</div>
-          <button className="btn btn-outline" style={{ marginTop: 20 }} onClick={logout}>
+          <button
+            className="btn btn-outline"
+            style={{ marginTop: 20 }}
+            onClick={logout}
+          >
             🚪 تسجيل الخروج
           </button>
         </div>
