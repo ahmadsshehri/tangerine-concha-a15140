@@ -31,11 +31,13 @@ function AppShell() {
     if (isAdmin) return 'supervisor'
     if (hasPerm('supervisor_entry') || hasPerm('supervisor_reports')) return 'supervisor'
     if (hasPerm('caretaker_entry')  || hasPerm('caretaker_reports'))  return 'caretaker'
-    if (hasPerm('housing_entry') || hasPerm('housing_reports')) return 'housing'
+    if (hasPerm('housing_entry')    || hasPerm('housing_reports'))    return 'housing'
     if (hasPerm('custody_view'))    return 'custody'
     if (hasPerm('reports_daily') || hasPerm('reports_view_all')) return 'reports'
     if (hasPerm('reports_tool') || hasPerm('reports_facility'))  return 'myreports'
-    return 'supervisor'
+    if (hasPerm('can_create_supervisors')) return 'admin'
+    // إذا ما في أي صلاحية معروفة — أظهر رسالة واضحة بدل التجميد
+    return '__no_access__'
   }
 
   // إعادة الصفحة لافتراضية عند تغيّر الصلاحيات
@@ -59,26 +61,36 @@ function AppShell() {
     switch (p) {
       case 'supervisor': return hasPerm('supervisor_entry') || hasPerm('supervisor_reports')
       case 'caretaker':  return hasPerm('caretaker_entry')  || hasPerm('caretaker_reports')
+      case 'housing':    return hasPerm('housing_entry')    || hasPerm('housing_reports')
       case 'custody':    return hasPerm('custody_view')
       case 'reports':    return hasPerm('reports_daily') || hasPerm('supervisor_reports') ||
                                 hasPerm('caretaker_reports') || hasPerm('custody_reports') ||
                                 hasPerm('reports_view_all')
       case 'myreports':  return hasPerm('reports_tool') || hasPerm('reports_facility')
-        case 'housing': return hasPerm('housing_entry') || hasPerm('housing_reports')
-      case 'admin':      return isAdmin
+      case 'admin':      return isAdmin || hasPerm('can_create_supervisors')
       default:           return false
     }
   }
 
   const renderPage = () => {
+    // حالة خاصة: المستخدم بدون أي صلاحية مفيدة
+    if (activePage === '__no_access__') {
+      return (
+        <div className="empty-state" style={{ paddingTop: 80 }}>
+          <div className="es-icon">🔒</div>
+          <div className="es-title">لا توجد صلاحيات مخصصة لحسابك</div>
+          <div className="es-sub">تواصل مع المدير لمنحك الصلاحيات المناسبة</div>
+        </div>
+      )
+    }
     if (!canAccess(activePage)) return <AccessDenied />
     switch (activePage) {
       case 'supervisor': return <SupervisorPage />
       case 'caretaker':  return <CaretakerPage />
+      case 'housing':    return <HousingReportPage />
       case 'custody':    return <CustodyPage />
       case 'reports':    return <ReportsPage />
       case 'myreports':  return <MyReportsPage />
-        case 'housing': return <HousingReportPage />
       case 'admin':      return <AdminPage />
       default:           return <AccessDenied />
     }
