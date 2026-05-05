@@ -12,8 +12,8 @@ export default function Topbar({ activePage, onNav }) {
       ? { id: 'supervisor', label: 'تقييم مسائي',    icon: '🌙' } : null,
     hasPerm('caretaker_entry') || hasPerm('caretaker_reports')
       ? { id: 'caretaker',  label: 'تقييم القيّمين', icon: '📊' } : null,
-      hasPerm('housing_entry') || hasPerm('housing_reports')
-      ? { id: 'housing', label: 'تقرير السكن', icon: '🏠' } : null,
+    hasPerm('housing_entry') || hasPerm('housing_reports')
+      ? { id: 'housing',    label: 'تقرير السكن',    icon: '🏠' } : null,
     hasPerm('custody_view') || isAdmin
       ? { id: 'custody',    label: 'إدارة العهدة',   icon: '📦' } : null,
     (hasPerm('reports_tool') || hasPerm('reports_facility')) && !isAdmin
@@ -22,7 +22,7 @@ export default function Topbar({ activePage, onNav }) {
     hasPerm('custody_reports')    || hasPerm('reports_view_all')  ||
     hasPerm('reports_daily')      || isAdmin
       ? { id: 'reports',    label: 'التقارير',        icon: '📈' } : null,
-    isAdmin
+    isAdmin || hasPerm('can_create_supervisors')
       ? { id: 'admin',      label: 'الإدارة',         icon: '⚙️' } : null,
   ].filter(Boolean)
 
