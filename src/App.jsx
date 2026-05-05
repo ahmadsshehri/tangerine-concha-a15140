@@ -22,14 +22,28 @@ function AccessDenied() {
   )
 }
 
+// ─── شاشة بدون صلاحيات ────────────────────────────────────────────────────────
+function NoAccess() {
+  const { logout } = useAuth()
+  return (
+    <div className="empty-state" style={{ paddingTop: 80 }}>
+      <div className="es-icon">🔒</div>
+      <div className="es-title">لا توجد صلاحيات مخصصة لحسابك</div>
+      <div className="es-sub">تواصل مع المدير لمنحك الصلاحيات المناسبة</div>
+      <button className="btn btn-outline" style={{ marginTop: 20 }} onClick={logout}>
+        🚪 تسجيل الخروج
+      </button>
+    </div>
+  )
+}
+
 function AppShell() {
-  const { user, loading, isAdmin, hasPerm } = useAuth()
+  const { user, loading, permissionsLoaded, isAdmin, hasPerm } = useAuth()
   const [page, setPage] = useState(null)
 
-  // إعادة الصفحة لافتراضية عند تغيّر المستخدم أو الصلاحيات
-  useEffect(() => {
-    if (user && !loading) setPage(null)
-  }, [user, loading])
+  // إعادة الصفحة لافتراضية عند تغيّر المستخدم فقط
+  const userId = user?.uid || null
+  useEffect(() => { setPage(null) }, [userId])
 
   // ─── الصفحة الافتراضية حسب الصلاحيات ─────────────────────────────────────
   const getDefaultPage = () => {
@@ -61,27 +75,24 @@ function AppShell() {
     }
   }
 
-  if (loading) return (
+  // ─── شاشة التحميل ─────────────────────────────────────────────────────────
+  const spinner = (
     <div className="loading-overlay" style={{ display: 'flex' }}>
       <div className="spinner" />
     </div>
   )
 
-  if (!user) return <LoginScreen />
+  if (loading) return spinner
+  if (!user)   return <LoginScreen />
+
+  // انتظر حتى تتحمل الصلاحيات من Firestore قبل ما نحدد الصفحة
+  if (!permissionsLoaded) return spinner
 
   const activePage = page || getDefaultPage()
 
   const renderPage = () => {
-    if (activePage === '__no_access__') {
-      return (
-        <div className="empty-state" style={{ paddingTop: 80 }}>
-          <div className="es-icon">🔒</div>
-          <div className="es-title">لا توجد صلاحيات مخصصة لحسابك</div>
-          <div className="es-sub">تواصل مع المدير لمنحك الصلاحيات المناسبة</div>
-        </div>
-      )
-    }
-    if (!canAccess(activePage)) return <AccessDenied />
+    if (activePage === '__no_access__') return <NoAccess />
+    if (!canAccess(activePage))         return <AccessDenied />
     switch (activePage) {
       case 'supervisor': return <SupervisorPage />
       case 'caretaker':  return <CaretakerPage />
