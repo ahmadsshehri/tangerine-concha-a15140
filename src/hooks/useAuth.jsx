@@ -1,124 +1,117 @@
-import { useState, useEffect } from 'react'
-import { useAuth } from './hooks/useAuth'
-import { ToastProvider } from './components/Toast'
-import LoginScreen       from './components/LoginScreen'
-import Topbar            from './components/Topbar'
-import SupervisorPage    from './modules/supervisor/SupervisorPage'
-import CaretakerPage     from './modules/caretaker/CaretakerPage'
-import CustodyPage       from './modules/custody/CustodyPage'
-import ReportsPage       from './modules/reports/ReportsPage'
-import AdminPage         from './modules/admin/AdminPage'
-import MyReportsPage     from './modules/maintenance/MyReportsPage'
-import HousingReportPage from './modules/housing/HousingReportPage'
+import { createContext, useContext, useEffect, useState, useRef } from 'react'
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, getIdToken } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
+import { auth, db } from '../lib/firebase'
 
-// ─── شاشة رفض الوصول ──────────────────────────────────────────────────────────
-function AccessDenied() {
-  return (
-    <div className="empty-state" style={{ paddingTop: 80 }}>
-      <div className="es-icon">🔒</div>
-      <div className="es-title">ليس لديك صلاحية لعرض هذه الصفحة</div>
-      <div className="es-sub">تواصل مع المدير لمنحك الصلاحية المناسبة</div>
-    </div>
-  )
-}
+const AuthContext = createContext(null)
 
-// ─── شاشة بدون صلاحيات ────────────────────────────────────────────────────────
-function NoAccess() {
-  const { logout } = useAuth()
-  return (
-    <div className="empty-state" style={{ paddingTop: 80 }}>
-      <div className="es-icon">🔒</div>
-      <div className="es-title">لا توجد صلاحيات مخصصة لحسابك</div>
-      <div className="es-sub">تواصل مع المدير لمنحك الصلاحيات المناسبة</div>
-      <button className="btn btn-outline" style={{ marginTop: 20 }} onClick={logout}>
-        🚪 تسجيل الخروج
-      </button>
-    </div>
-  )
-}
+export function AuthProvider({ children }) {
+  const [user,             setUser]             = useState(null)
+  const [role,             setRole]             = useState(null)
+  const [name,             setName]             = useState(null)
+  const [permissions,      setPermissions]      = useState({})
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false)
+  const [loading,          setLoading]          = useState(true)
+  const refreshTimerRef = useRef(null)
 
-function AppShell() {
-  const { user, loading, permissionsLoaded, isAdmin, hasPerm } = useAuth()
-  const [page, setPage] = useState(null)
-
-  // إعادة الصفحة لافتراضية عند تغيّر المستخدم فقط
-  const userId = user?.uid || null
-  useEffect(() => { setPage(null) }, [userId])
-
-  // ─── الصفحة الافتراضية حسب الصلاحيات ─────────────────────────────────────
-  const getDefaultPage = () => {
-    if (isAdmin)                                                        return 'supervisor'
-    if (hasPerm('supervisor_entry') || hasPerm('supervisor_reports'))   return 'supervisor'
-    if (hasPerm('caretaker_entry')  || hasPerm('caretaker_reports'))    return 'caretaker'
-    if (hasPerm('housing_entry')    || hasPerm('housing_reports'))      return 'housing'
-    if (hasPerm('custody_view'))                                        return 'custody'
-    if (hasPerm('reports_daily')    || hasPerm('reports_view_all'))     return 'reports'
-    if (hasPerm('reports_tool')     || hasPerm('reports_facility'))     return 'myreports'
-    if (hasPerm('can_create_supervisors'))                              return 'admin'
-    return '__no_access__'
-  }
-
-  // ─── هل الصفحة المطلوبة مسموح بها؟ ──────────────────────────────────────
-  const canAccess = (p) => {
-    if (isAdmin) return true
-    switch (p) {
-      case 'supervisor': return hasPerm('supervisor_entry')  || hasPerm('supervisor_reports')
-      case 'caretaker':  return hasPerm('caretaker_entry')   || hasPerm('caretaker_reports')
-      case 'housing':    return hasPerm('housing_entry')     || hasPerm('housing_reports')
-      case 'custody':    return hasPerm('custody_view')
-      case 'reports':    return hasPerm('reports_daily')     || hasPerm('supervisor_reports') ||
-                                hasPerm('caretaker_reports') || hasPerm('custody_reports')   ||
-                                hasPerm('reports_view_all')
-      case 'myreports':  return hasPerm('reports_tool')      || hasPerm('reports_facility')
-      case 'admin':      return isAdmin || hasPerm('can_create_supervisors')
-      default:           return false
+  // ── جلب بيانات المستخدم من Firestore مع إعادة المحاولة
+  const fetchUserData = async (firebaseUser, retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        await getIdToken(firebaseUser, true)
+        const snap = await getDoc(doc(db, 'users', firebaseUser.uid))
+        if (snap.exists()) return snap.data()
+        return null
+      } catch (err) {
+        if (i < retries - 1 && err.code !== 'permission-denied') {
+          await new Promise(res => setTimeout(res, 1000 * (i + 1)))
+          continue
+        }
+        console.error('fetchUserData error:', err)
+        return 'error'
+      }
     }
+    return 'error'
   }
 
-  // ─── شاشة التحميل ─────────────────────────────────────────────────────────
-  const spinner = (
-    <div className="loading-overlay" style={{ display: 'flex' }}>
-      <div className="spinner" />
-    </div>
-  )
+  // ── جدولة تجديد تلقائي للـ token كل 55 دقيقة
+  const scheduleTokenRefresh = (firebaseUser) => {
+    if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
+    refreshTimerRef.current = setInterval(async () => {
+      try {
+        await getIdToken(firebaseUser, true)
+        const data = await fetchUserData(firebaseUser, 1)
+        if (data && data !== 'error') {
+          setRole(data.role)
+          setName(data.name)
+          setPermissions(data.permissions || {})
+        }
+      } catch (err) {
+        console.error('Token refresh failed:', err)
+      }
+    }, 55 * 60 * 1000)
+  }
 
-  if (loading) return spinner
-  if (!user)   return <LoginScreen />
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // أعد تعيين permissionsLoaded عند كل login جديد
+        setPermissionsLoaded(false)
 
-  // انتظر حتى تتحمل الصلاحيات من Firestore قبل ما نحدد الصفحة
-  if (!permissionsLoaded) return spinner
+        const data = await fetchUserData(firebaseUser)
 
-  const activePage = page || getDefaultPage()
+        if (data === null) {
+          if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
+          await signOut(auth)
+        } else if (data === 'error') {
+          setUser(firebaseUser)
+          setPermissionsLoaded(true) // حتى في حالة الخطأ نفتح الموقع
+          setLoading(false)
+          scheduleTokenRefresh(firebaseUser)
+        } else {
+          setUser(firebaseUser)
+          setRole(data.role)
+          setName(data.name)
+          setPermissions(data.permissions || {})
+          setPermissionsLoaded(true)
+          setLoading(false)
+          scheduleTokenRefresh(firebaseUser)
+        }
+      } else {
+        if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
+        setUser(null)
+        setRole(null)
+        setName(null)
+        setPermissions({})
+        setPermissionsLoaded(false)
+        setLoading(false)
+      }
+    })
 
-  const renderPage = () => {
-    if (activePage === '__no_access__') return <NoAccess />
-    if (!canAccess(activePage))         return <AccessDenied />
-    switch (activePage) {
-      case 'supervisor': return <SupervisorPage />
-      case 'caretaker':  return <CaretakerPage />
-      case 'housing':    return <HousingReportPage />
-      case 'custody':    return <CustodyPage />
-      case 'reports':    return <ReportsPage />
-      case 'myreports':  return <MyReportsPage />
-      case 'admin':      return <AdminPage />
-      default:           return <AccessDenied />
+    return () => {
+      unsubscribe()
+      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
     }
+  }, [])
+
+  const login  = (email, password) => signInWithEmailAndPassword(auth, email, password)
+  const logout = () => {
+    if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
+    return signOut(auth)
   }
 
+  const isAdmin  = role === 'admin'
+  const hasPerm  = (key) => isAdmin || permissions?.[key] === true
+  const canWrite = isAdmin || permissions?.supervisor_entry || permissions?.caretaker_entry
+
   return (
-    <div className="app-shell">
-      <Topbar activePage={activePage} onNav={setPage} />
-      <main className="main-content">
-        {renderPage()}
-      </main>
-    </div>
+    <AuthContext.Provider value={{
+      user, role, name, permissions, permissionsLoaded,
+      loading, login, logout, isAdmin, canWrite, hasPerm
+    }}>
+      {children}
+    </AuthContext.Provider>
   )
 }
 
-export default function App() {
-  return (
-    <ToastProvider>
-      <AppShell />
-    </ToastProvider>
-  )
-}
+export const useAuth = () => useContext(AuthContext)
