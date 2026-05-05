@@ -15,20 +15,20 @@ const ALL_PERMISSIONS = [
       { key: 'supervisor_reports', label: 'عرض تقارير المشرفين' },
     ]
   },
-   {
-    group: '🏠 تقرير مشرف السكن',
-    perms: [
-      { key: 'housing_entry',   label: 'إدخال تقرير مشرف السكن' },
-      { key: 'housing_delete',  label: 'حذف تقارير مشرف السكن' },
-      { key: 'housing_reports', label: 'عرض تقارير مشرف السكن' },
-    ]
-  },
   {
     group: '📊 تقييم القيّمين',
     perms: [
       { key: 'caretaker_entry',   label: 'إدخال تقييمات القيّمين' },
       { key: 'caretaker_delete',  label: 'حذف تقييمات القيّمين' },
       { key: 'caretaker_reports', label: 'عرض تقارير القيّمين' },
+    ]
+  },
+  {
+    group: '🏠 تقرير مشرف السكن',
+    perms: [
+      { key: 'housing_entry',   label: 'إدخال تقرير مشرف السكن' },
+      { key: 'housing_delete',  label: 'حذف تقارير مشرف السكن' },
+      { key: 'housing_reports', label: 'عرض تقارير مشرف السكن' },
     ]
   },
   {
@@ -68,6 +68,9 @@ const DEFAULT_SUPERVISOR_PERMS = {
   caretaker_entry:         true,
   caretaker_delete:        false,
   caretaker_reports:       true,
+  housing_entry:           true,
+  housing_delete:          false,
+  housing_reports:         true,
   custody_view:            false,
   custody_movements:       false,
   custody_items:           false,
@@ -80,9 +83,6 @@ const DEFAULT_SUPERVISOR_PERMS = {
   reports_view_all:        false,
   reports_followup:        false,
   can_create_supervisors:  false,
-   housing_entry:   true,
-  housing_delete:  false,
-  housing_reports: true,
 }
 
 export function usePermission(key) {
@@ -98,7 +98,7 @@ export default function AdminPage() {
   const [loading,   setLoading]   = useState(false)
   const [addModal,  setAddModal]  = useState(false)
   const [permModal, setPermModal] = useState(null)
-  const [form,      setForm]      = useState({ name: '', email: '', password: '' })
+  const [form,      setForm]      = useState({ name: '', email: '', password: '', role: 'supervisor' })
   const [saving,    setSaving]    = useState(false)
 
   // المشرف يمكنه الدخول إذا كان مديراً أو لديه صلاحية إنشاء مشرفين
@@ -126,23 +126,31 @@ export default function AdminPage() {
 
   const f = u => setForm(p => ({ ...p, ...u }))
 
-  // ─ إضافة مستخدم جديد
+  // ─ إضافة مستخدم جديد (مشرف أو مدير)
   const addUser = async () => {
     if (!form.name || !form.email || !form.password) {
       toast('⚠️ جميع الحقول مطلوبة', 'warn'); return
     }
+    // المشرف الذي لديه can_create_supervisors لا يستطيع إنشاء مدير
+    if (!isAdmin && form.role === 'admin') {
+      toast('❌ لا تملك صلاحية إنشاء حساب مدير', 'error'); return
+    }
     setSaving(true)
     try {
       const cred = await createUserWithEmailAndPassword(auth, form.email, form.password)
-      await setDoc(doc(db, 'users', cred.user.uid), {
+      const userData = {
         name: form.name, email: form.email,
-        role: 'supervisor',
-        permissions: DEFAULT_SUPERVISOR_PERMS,
+        role: form.role,
         createdAt: new Date().toISOString()
-      })
-      toast('✅ تم إضافة المشرف')
+      }
+      // المدير لا يحتاج permissions، المشرف يأخذ الافتراضية
+      if (form.role === 'supervisor') {
+        userData.permissions = DEFAULT_SUPERVISOR_PERMS
+      }
+      await setDoc(doc(db, 'users', cred.user.uid), userData)
+      toast(form.role === 'admin' ? '✅ تم إضافة المدير' : '✅ تم إضافة المشرف')
       setAddModal(false)
-      setForm({ name: '', email: '', password: '' })
+      setForm({ name: '', email: '', password: '', role: 'supervisor' })
       fetchUsers()
     } catch (e) {
       toast('❌ ' + (e.code === 'auth/email-already-in-use' ? 'البريد مستخدم مسبقاً' : e.message), 'error')
@@ -150,7 +158,7 @@ export default function AdminPage() {
     setSaving(false)
   }
 
-  // ─ حذف مستخدم (مشرف أو مدير)
+  // ─ حذف مستخدم
   const delUser = async (user) => {
     if (!isAdmin) { toast('❌ هذه الصلاحية للمديرين فقط', 'error'); return }
     const label = user.role === 'admin' ? 'المدير' : 'المشرف'
@@ -180,6 +188,21 @@ export default function AdminPage() {
     } catch (e) { toast('❌ ' + e.message, 'error') }
   }
 
+  // ─ ترقية مشرف إلى مدير
+  const promoteToAdmin = async (user) => {
+    if (!isAdmin) { toast('❌ هذه الصلاحية للمديرين فقط', 'error'); return }
+    if (!confirm(`ترقية "${user.name}" إلى مدير؟ سيحصل على كامل الصلاحيات.`)) return
+    try {
+      const { permissions, ...rest } = user
+      await setDoc(doc(db, 'users', user.id), {
+        ...rest,
+        role: 'admin',
+      }, { merge: false })
+      toast('✅ تم ترقية الحساب إلى مدير')
+      fetchUsers()
+    } catch (e) { toast('❌ ' + e.message, 'error') }
+  }
+
   const supervisors = users.filter(u => u.role === 'supervisor')
   const admins      = users.filter(u => u.role === 'admin')
 
@@ -190,7 +213,9 @@ export default function AdminPage() {
           <div className="icon" style={{ background: 'rgba(227,179,65,.15)' }}>⚙️</div>
           {isAdmin ? 'إدارة المستخدمين والصلاحيات' : 'إضافة حسابات مشرفين'}
         </div>
-        <button className="btn btn-primary" onClick={() => setAddModal(true)}>+ مشرف جديد</button>
+        <button className="btn btn-primary" onClick={() => setAddModal(true)}>
+          + {isAdmin ? 'مستخدم جديد' : 'مشرف جديد'}
+        </button>
       </div>
 
       {/* إحصاءات */}
@@ -240,7 +265,6 @@ export default function AdminPage() {
                         <button
                           className="btn btn-outline btn-xs"
                           onClick={() => demoteAdmin(u)}
-                          title="تحويل إلى مشرف"
                           style={{ fontSize: 11 }}
                         >
                           ↓ تحويل لمشرف
@@ -264,7 +288,7 @@ export default function AdminPage() {
           <div className="empty-state" style={{ padding: 30 }}>
             <div className="es-icon">👤</div>
             <div className="es-title">لا يوجد مشرفون</div>
-            <div className="es-sub">أضف مشرفاً جديداً بالضغط على "مشرف جديد"</div>
+            <div className="es-sub">أضف مشرفاً جديداً بالضغط على الزر أعلاه</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -297,11 +321,18 @@ export default function AdminPage() {
                         <div style={{ height: '100%', borderRadius: 3, background: 'var(--accent)', width: `${(enabledCount/totalCount)*100}%`, transition: 'width .3s' }} />
                       </div>
                       {isAdmin && (
-                        <button className="btn btn-blue btn-sm" onClick={() => setPermModal(user)}>
-                          🔑 الصلاحيات
-                        </button>
+                        <>
+                          <button className="btn btn-outline btn-xs" onClick={() => promoteToAdmin(user)} style={{ fontSize: 11 }}>
+                            ↑ ترقية لمدير
+                          </button>
+                          <button className="btn btn-blue btn-sm" onClick={() => setPermModal(user)}>
+                            🔑 الصلاحيات
+                          </button>
+                        </>
                       )}
-                      <button className="btn btn-danger btn-xs" onClick={() => delUser(user)}>حذف</button>
+                      {(isAdmin || hasPerm('can_create_supervisors')) && (
+                        <button className="btn btn-danger btn-xs" onClick={() => delUser(user)}>حذف</button>
+                      )}
                     </div>
                   </div>
 
@@ -326,19 +357,49 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* ─ نافذة إضافة مشرف */}
+      {/* ─ نافذة إضافة مستخدم */}
       {addModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setAddModal(false)}>
           <div className="modal">
             <div className="modal-header">
-              <div className="modal-title">➕ إضافة مشرف جديد</div>
+              <div className="modal-title">➕ إضافة {form.role === 'admin' ? 'مدير' : 'مشرف'} جديد</div>
               <button className="modal-close" onClick={() => setAddModal(false)}>✕</button>
             </div>
             <div className="modal-body">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* نوع الحساب — للمدير فقط */}
+                {isAdmin && (
+                  <div className="form-group">
+                    <label>نوع الحساب *</label>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                      {[
+                        { val: 'supervisor', label: '👤 مشرف', desc: 'صلاحيات قابلة للتخصيص' },
+                        { val: 'admin',      label: '👑 مدير',  desc: 'كامل الصلاحيات' },
+                      ].map(opt => (
+                        <button
+                          key={opt.val}
+                          type="button"
+                          onClick={() => f({ role: opt.val })}
+                          style={{
+                            flex: 1, padding: '10px 14px', borderRadius: 'var(--rs)',
+                            cursor: 'pointer', fontFamily: 'Cairo', textAlign: 'center',
+                            border: `2px solid ${form.role === opt.val ? 'var(--accent)' : 'var(--border)'}`,
+                            background: form.role === opt.val ? 'var(--accent-dim)' : 'var(--surface2)',
+                            color: form.role === opt.val ? 'var(--accent)' : 'var(--text-muted)',
+                            transition: 'all .15s'
+                          }}
+                        >
+                          <div style={{ fontSize: 14, fontWeight: 700 }}>{opt.label}</div>
+                          <div style={{ fontSize: 11, marginTop: 3, opacity: .8 }}>{opt.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="form-group">
                   <label>الاسم الكامل *</label>
-                  <input value={form.name} onChange={e => f({ name: e.target.value })} placeholder="اسم المشرف" autoFocus />
+                  <input value={form.name} onChange={e => f({ name: e.target.value })} placeholder="الاسم الكامل" autoFocus />
                 </div>
                 <div className="form-group">
                   <label>البريد الإلكتروني *</label>
@@ -348,10 +409,18 @@ export default function AdminPage() {
                   <label>كلمة المرور *</label>
                   <input type="password" value={form.password} onChange={e => f({ password: e.target.value })} placeholder="6 أحرف على الأقل" />
                 </div>
-                <div style={{ padding: '10px 14px', background: 'var(--blue-dim)', borderRadius: 'var(--rs)', fontSize: 12, color: 'var(--blue)' }}>
-                  💡 سيتم إنشاء الحساب بالصلاحيات الافتراضية
-                  {isAdmin && ' — يمكنك تعديلها بعد الإنشاء'}
-                </div>
+
+                {form.role === 'supervisor' && (
+                  <div style={{ padding: '10px 14px', background: 'var(--blue-dim)', borderRadius: 'var(--rs)', fontSize: 12, color: 'var(--blue)' }}>
+                    💡 سيتم إنشاء حساب المشرف بالصلاحيات الافتراضية
+                    {isAdmin && ' — يمكنك تعديلها بعد الإنشاء'}
+                  </div>
+                )}
+                {form.role === 'admin' && (
+                  <div style={{ padding: '10px 14px', background: 'rgba(227,179,65,.12)', borderRadius: 'var(--rs)', fontSize: 12, color: 'var(--orange)' }}>
+                    ⚠️ المدير سيحصل على كامل الصلاحيات في النظام
+                  </div>
+                )}
               </div>
             </div>
             <div className="modal-footer">
