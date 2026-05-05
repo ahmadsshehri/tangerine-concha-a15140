@@ -11,27 +11,25 @@ import AdminPage         from './modules/admin/AdminPage'
 import MyReportsPage     from './modules/maintenance/MyReportsPage'
 import HousingReportPage from './modules/housing/HousingReportPage'
 
-// ─── الصفحة الرئيسية المحايدة ──────────────────────────────────────────────────
-function HomePage({ onNav, hasPerm, isAdmin }) {
-  const pages = [
-    { id: 'supervisor', label: 'التقييم المسائي',    icon: '🌙', color: 'var(--blue)',
-      show: isAdmin || hasPerm('supervisor_entry') || hasPerm('supervisor_reports') },
-    { id: 'caretaker',  label: 'تقييم القيّمين',     icon: '📊', color: 'var(--purple)',
-      show: isAdmin || hasPerm('caretaker_entry')  || hasPerm('caretaker_reports') },
-    { id: 'housing',    label: 'تقرير السكن',         icon: '🏠', color: 'var(--green)',
-      show: isAdmin || hasPerm('housing_entry')    || hasPerm('housing_reports') },
-    { id: 'custody',    label: 'إدارة العهدة',        icon: '📦', color: 'var(--orange)',
-      show: isAdmin || hasPerm('custody_view') },
-    { id: 'reports',    label: 'التقارير',            icon: '📈', color: 'var(--accent)',
-      show: isAdmin || hasPerm('reports_daily')    || hasPerm('supervisor_reports') ||
-            hasPerm('caretaker_reports') || hasPerm('custody_reports') || hasPerm('reports_view_all') },
-    { id: 'myreports',  label: 'بلاغاتي',            icon: '🔧', color: 'var(--purple)',
-      show: !isAdmin && (hasPerm('reports_tool') || hasPerm('reports_facility')) },
-    { id: 'admin',      label: 'الإدارة',             icon: '⚙️', color: 'var(--orange)',
-      show: isAdmin || hasPerm('can_create_supervisors') },
-  ].filter(p => p.show)
+// ─── صفحة رفض الوصول ──────────────────────────────────────────────────────────
+function AccessDenied({ onBack }) {
+  return (
+    <div className="empty-state" style={{ paddingTop: 80 }}>
+      <div className="es-icon">🔒</div>
+      <div className="es-title">ليس لديك صلاحية لعرض هذه الصفحة</div>
+      <div className="es-sub">تواصل مع المدير لمنحك الصلاحية المناسبة</div>
+      {onBack && (
+        <button className="btn btn-outline" style={{ marginTop: 20 }} onClick={onBack}>
+          ← رجوع للرئيسية
+        </button>
+      )}
+    </div>
+  )
+}
 
-  if (pages.length === 0) return (
+// ─── الصفحة الرئيسية ──────────────────────────────────────────────────────────
+function HomePage({ onNav, allowed }) {
+  if (allowed.length === 0) return (
     <div className="empty-state" style={{ paddingTop: 100 }}>
       <div className="es-icon">🔒</div>
       <div className="es-title">لا توجد صلاحيات مخصصة لحسابك</div>
@@ -40,70 +38,29 @@ function HomePage({ onNav, hasPerm, isAdmin }) {
   )
 
   return (
-    <div className="animate-in" style={{ paddingTop: 20 }}>
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <div style={{ fontSize: 40, marginBottom: 8 }}>🏥</div>
-        <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)' }}>
+    <div className="animate-in">
+      <div style={{ textAlign: 'center', marginBottom: 32, paddingTop: 20 }}>
+        <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)', marginBottom: 6 }}>
           نظام إدارة المراكز التأهيلية
         </div>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           اختر القسم الذي تريد الدخول إليه
         </div>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-        gap: 16,
-        maxWidth: 800,
-        margin: '0 auto',
-      }}>
-        {pages.map(p => (
-          <button
+      <div className="masanda-grid" style={{ maxWidth: 700, margin: '0 auto', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+        {allowed.map(p => (
+          <div
             key={p.id}
+            className="masanda-card"
             onClick={() => onNav(p.id)}
-            style={{
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              gap: 12, padding: '28px 20px',
-              background: 'var(--surface)',
-              border: `2px solid var(--border)`,
-              borderRadius: 'var(--r)',
-              cursor: 'pointer', transition: 'all .2s',
-              fontFamily: 'Cairo',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = p.color
-              e.currentTarget.style.transform = 'translateY(-3px)'
-              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,.1)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'var(--border)'
-              e.currentTarget.style.transform = ''
-              e.currentTarget.style.boxShadow = ''
-            }}
+            style={{ padding: '28px 16px', textAlign: 'center' }}
           >
-            <div style={{ fontSize: 36 }}>{p.icon}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
-              {p.label}
-            </div>
-          </button>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>{p.icon}</div>
+            <div className="mc-name" style={{ fontSize: 14 }}>{p.label}</div>
+          </div>
         ))}
       </div>
-    </div>
-  )
-}
-
-// ─── شاشة رفض الوصول ──────────────────────────────────────────────────────────
-function AccessDenied({ onBack }) {
-  return (
-    <div className="empty-state" style={{ paddingTop: 80 }}>
-      <div className="es-icon">🔒</div>
-      <div className="es-title">ليس لديك صلاحية لعرض هذه الصفحة</div>
-      <div className="es-sub">تواصل مع المدير لمنحك الصلاحية المناسبة</div>
-      <button className="btn btn-outline" style={{ marginTop: 20 }} onClick={onBack}>
-        ← رجوع
-      </button>
     </div>
   )
 }
@@ -112,9 +69,42 @@ function AppShell() {
   const { user, loading, isAdmin, hasPerm, logout } = useAuth()
   const [page, setPage] = useState(null)
 
-  // إعادة الصفحة للـ home عند تغيّر المستخدم
   const userId = user?.uid || null
   useEffect(() => { setPage(null) }, [userId])
+
+  // ─── قائمة الصفحات المسموح بها لهذا المستخدم ─────────────────────────────
+  const getAllowed = () => [
+    {
+      id: 'supervisor', label: 'التقييم المسائي',  icon: '🌙',
+      show: isAdmin || hasPerm('supervisor_entry') || hasPerm('supervisor_reports'),
+    },
+    {
+      id: 'caretaker',  label: 'تقييم القيّمين',   icon: '📊',
+      show: isAdmin || hasPerm('caretaker_entry')  || hasPerm('caretaker_reports'),
+    },
+    {
+      id: 'housing',    label: 'تقرير السكن',       icon: '🏠',
+      show: isAdmin || hasPerm('housing_entry')    || hasPerm('housing_reports'),
+    },
+    {
+      id: 'custody',    label: 'إدارة العهدة',      icon: '📦',
+      show: isAdmin || hasPerm('custody_view'),
+    },
+    {
+      id: 'reports',    label: 'التقارير',          icon: '📈',
+      show: isAdmin || hasPerm('reports_daily')    || hasPerm('supervisor_reports') ||
+            hasPerm('caretaker_reports') || hasPerm('custody_reports') ||
+            hasPerm('reports_view_all'),
+    },
+    {
+      id: 'myreports',  label: 'بلاغاتي',          icon: '🔧',
+      show: !isAdmin && (hasPerm('reports_tool') || hasPerm('reports_facility')),
+    },
+    {
+      id: 'admin',      label: 'الإدارة',           icon: '⚙️',
+      show: isAdmin || hasPerm('can_create_supervisors'),
+    },
+  ].filter(p => p.show)
 
   // ─── هل الصفحة مسموح بها؟ ────────────────────────────────────────────────
   const canAccess = (p) => {
@@ -141,17 +131,11 @@ function AppShell() {
 
   if (!user) return <LoginScreen />
 
+  const allowed = getAllowed()
+
   const renderPage = () => {
-    // الصفحة الرئيسية — null أو 'home'
-    if (!page || page === 'home') {
-      return <HomePage onNav={setPage} hasPerm={hasPerm} isAdmin={isAdmin} />
-    }
-
-    // تحقق من الصلاحية
-    if (!canAccess(page)) {
-      return <AccessDenied onBack={() => setPage(null)} />
-    }
-
+    if (!page) return <HomePage onNav={setPage} allowed={allowed} />
+    if (!canAccess(page)) return <AccessDenied onBack={() => setPage(null)} />
     switch (page) {
       case 'supervisor': return <SupervisorPage />
       case 'caretaker':  return <CaretakerPage />
@@ -160,7 +144,7 @@ function AppShell() {
       case 'reports':    return <ReportsPage />
       case 'myreports':  return <MyReportsPage />
       case 'admin':      return <AdminPage />
-      default:           return <HomePage onNav={setPage} hasPerm={hasPerm} isAdmin={isAdmin} />
+      default:           return <HomePage onNav={setPage} allowed={allowed} />
     }
   }
 
