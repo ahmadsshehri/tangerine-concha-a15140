@@ -988,18 +988,352 @@ export default function HousingReportPage() {
       </div>
 
       <div className="tabs">
-        <button
-          className={`tab-btn ${tab === 'entry' ? 'active' : ''}`}
-          onClick={() => setTab('entry')}
-        >📝 إدخال تقرير</button>
-        <button
-          className={`tab-btn ${tab === 'supervisors' ? 'active' : ''}`}
-          onClick={() => setTab('supervisors')}
-        >👥 أداء المشرفين</button>
+        <button className={`tab-btn ${tab === 'entry'       ? 'active' : ''}`} onClick={() => setTab('entry')}>📝 إدخال تقرير</button>
+        <button className={`tab-btn ${tab === 'daily'       ? 'active' : ''}`} onClick={() => setTab('daily')}>📋 التقرير اليومي</button>
+        <button className={`tab-btn ${tab === 'supervisors' ? 'active' : ''}`} onClick={() => setTab('supervisors')}>👥 أداء المشرفين</button>
       </div>
 
       {tab === 'entry'       && <EntryTab />}
+      {tab === 'daily'       && <DailyReportTab />}
       {tab === 'supervisors' && <SupervisorsTab />}
+    </div>
+  )
+}
+
+// ─── التقرير اليومي ────────────────────────────────────────────────────────────
+function DailyReportTab() {
+  const toast = useToast()
+  const [date,    setDate]    = useState(TODAY())
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  const load = async () => {
+    if (!date) return
+    setLoading(true)
+    try {
+      const snap = await getDocs(collection(db, 'housingReports'))
+      const recs = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(r => r.date === date)
+        .sort((a, b) => (a.savedBy || '').localeCompare(b.savedBy || ''))
+      setRecords(recs)
+    } catch (e) { toast('❌ ' + e.message, 'error') }
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [date])
+
+  // ─── مساعدات ──────────────────────────────────────────────────────────────
+  const wingLabel = (val) => {
+    if (!val) return '—'
+    const parts = val.split('__')
+    if (parts.length < 2) return val
+    const m = MASANDAT.find(x => x.id === parts[0])
+    const w = parts[1]
+    return `${m?.name || parts[0]} / ${isNaN(w) ? w : 'جناح ' + w}`
+  }
+
+  const taskPct = (tasks) => {
+    if (!tasks?.length) return '—'
+    const done = tasks.filter(t => t.done !== false).length
+    return `${Math.round((done / tasks.length) * 100)}%`
+  }
+
+  const otherWings = (r) =>
+    (r.otherCenters || []).map(c => wingLabel(c.wing)).filter(Boolean).join(' | ') || '—'
+
+  const activitiesSummary = (r) => {
+    const acts = r.activities || []
+    if (!acts.length) return '—'
+    return acts.map(a => a.name || 'نشاط').join(' | ')
+  }
+
+  // ─── CSS طباعة ─────────────────────────────────────────────────────────────
+  const PRINT_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Cairo',sans-serif;background:#fff;color:#1a2233;direction:rtl;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+
+.header{background:linear-gradient(135deg,#0a4d3a,#1D9E75);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-radius:8px;}
+.header-title{font-size:17px;font-weight:900;}
+.header-sub{font-size:11px;opacity:.8;margin-top:3px;}
+.header-right{text-align:left;font-size:11px;opacity:.85;line-height:1.8;}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+.stat{background:#f0fdf8;border:1.5px solid #1D9E75;border-radius:8px;padding:10px 12px;text-align:center;}
+.stat-val{font-size:22px;font-weight:900;color:#0a4d3a;}
+.stat-lbl{font-size:10px;color:#5f6b7e;font-weight:700;margin-top:2px;}
+
+table{width:100%;border-collapse:collapse;font-size:10px;}
+thead tr{background:#0a4d3a;}
+thead th{color:#fff;padding:8px 6px;text-align:right;font-weight:700;font-size:10px;border:1px solid #0a4d3a;}
+tbody tr:nth-child(even){background:#f8fffe;}
+tbody tr:nth-child(odd){background:#fff;}
+tbody td{padding:7px 6px;border:1px solid #d1e7dd;vertical-align:top;line-height:1.5;}
+.td-center{text-align:center;}
+.badge-done{display:inline-block;background:#dcfce7;color:#166534;padding:1px 7px;border-radius:20px;font-size:9px;font-weight:700;border:1px solid #bbf7d0;}
+.badge-pct{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:800;}
+.pct-high{background:#dcfce7;color:#166534;border:1px solid #bbf7d0;}
+.pct-mid{background:#fef9c3;color:#854d0e;border:1px solid #fde68a;}
+.pct-low{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;}
+.score-high{background:#dcfce7;color:#166534;border:1px solid #bbf7d0;}
+.score-mid{background:#fef9c3;color:#854d0e;border:1px solid #fde68a;}
+.score-low{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;}
+.tasks-row{margin-top:4px;}
+.task-item{display:inline-block;margin:1px 2px;font-size:9px;}
+
+.section-title{font-size:11px;font-weight:800;color:#0a4d3a;padding:5px 10px;background:#e8f8f2;border-right:4px solid #1D9E75;border-radius:0 5px 5px 0;margin:12px 0 8px;}
+.footer{border-top:2px solid #d1e7dd;margin-top:14px;padding:6px 0 0;display:flex;justify-content:space-between;font-size:9px;color:#9aa3b0;}
+@media print{@page{size:A4 landscape;margin:8mm;}button{display:none!important;}.no-print{display:none!important;}}
+`
+
+  const doPrint = () => {
+    if (!records.length) { toast('⚠️ لا توجد بيانات لهذا التاريخ', 'warn'); return }
+
+    const d = new Date(date + 'T12:00:00')
+    const days = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']
+    const dayName = days[d.getDay()]
+
+    const totalActs   = records.reduce((s, r) => s + (r.activities?.length  || 0), 0)
+    const totalOther  = records.reduce((s, r) => s + (r.otherCenters?.length || 0), 0)
+    const avgScore    = records.filter(r => +r.generalScore > 0)
+    const avgScoreVal = avgScore.length
+      ? Math.round(avgScore.reduce((s, r) => s + (+r.generalScore), 0) / avgScore.length)
+      : '—'
+
+    const pctClass = (p) => {
+      const n = parseInt(p)
+      if (isNaN(n)) return 'badge-pct'
+      return n >= 80 ? 'badge-pct pct-high' : n >= 60 ? 'badge-pct pct-mid' : 'badge-pct pct-low'
+    }
+    const scoreClass = (s) => {
+      const n = parseInt(s)
+      if (isNaN(n)) return ''
+      return n >= 80 ? 'badge-pct score-high' : n >= 60 ? 'badge-pct score-mid' : 'badge-pct score-low'
+    }
+
+    const TASK_LABELS_SHORT = ['البيئة العلاجية','اجتماع القيّم','سجل الوقائع','جولة السكن']
+
+    const rows = records.map((r, i) => {
+      const tasks  = r.tasks || []
+      const pct    = taskPct(r.tasks)
+      const score  = r.generalScore ? `${r.generalScore}%` : '—'
+      const acts   = (r.activities || [])
+      const others = (r.otherCenters || [])
+
+      const tasksHtml = TASK_LABELS_SHORT.map((lbl, ti) => {
+        const t = tasks[ti]
+        const done = !t || t.done !== false
+        return `<span class="task-item">${done ? '✓' : '✗'} ${lbl}</span>`
+      }).join('')
+
+      const actsHtml = acts.length
+        ? acts.map(a => `• ${a.name || 'نشاط'}${a.type ? ' (' + a.type + ')' : ''}${a.beneficiaries ? ' — ' + a.beneficiaries + ' مستفيد' : ''}`).join('<br/>')
+        : '—'
+
+      const othersHtml = others.length
+        ? others.map(c => wingLabel(c.wing)).join('<br/>')
+        : '—'
+
+      return `
+        <tr>
+          <td class="td-center" style="font-weight:800;color:#0a4d3a">${i + 1}</td>
+          <td style="font-weight:700">${r.savedBy || '—'}</td>
+          <td>${wingLabel(r.wing)}</td>
+          <td>${othersHtml}</td>
+          <td class="td-center"><span class="${scoreClass(r.generalScore)}">${score}</span></td>
+          <td class="td-center"><span class="${pctClass(pct)}">${pct}</span></td>
+          <td style="font-size:9px">${tasksHtml}</td>
+          <td style="font-size:9px">${actsHtml}</td>
+          <td style="font-size:9px;color:#555">${r.obs?.amni || r.obs?.fanni || r.obs?.baramij
+            ? [r.obs.amni && '🛡️ ' + r.obs.amni, r.obs.fanni && '🔧 ' + r.obs.fanni, r.obs.baramij && '📚 ' + r.obs.baramij].filter(Boolean).join('<br/>')
+            : '—'}</td>
+        </tr>`
+    }).join('')
+
+    const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8"><style>${PRINT_CSS}</style></head>
+<body>
+<div class="header">
+  <div>
+    <div class="header-title">📋 التقرير اليومي — مشرفو السكن</div>
+    <div class="header-sub">المراكز التأهيلية التخصصية</div>
+  </div>
+  <div class="header-right">
+    <div>📅 ${dayName} | ${date}</div>
+    <div>عدد المشرفين: ${records.length}</div>
+    <div>تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-val">${records.length}</div><div class="stat-lbl">مشرف نشط</div></div>
+  <div class="stat"><div class="stat-val">${totalOther}</div><div class="stat-lbl">تعقيبات على مراكز أخرى</div></div>
+  <div class="stat"><div class="stat-val">${totalActs}</div><div class="stat-lbl">أنشطة أُشرف عليها</div></div>
+  <div class="stat"><div class="stat-val">${avgScoreVal}${avgScoreVal !== '—' ? '%' : ''}</div><div class="stat-lbl">متوسط النسبة التقديرية</div></div>
+</div>
+
+<div class="section-title">تفاصيل أداء المشرفين</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:30px">#</th>
+      <th style="width:90px">اسم المشرف</th>
+      <th style="width:110px">الجناح الأساسي</th>
+      <th style="width:110px">الأجنحة الأخرى</th>
+      <th style="width:65px">النسبة التقديرية</th>
+      <th style="width:60px">إنجاز المهام</th>
+      <th>المهام اليومية</th>
+      <th>الأنشطة</th>
+      <th>الملاحظات</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+
+<div class="footer">
+  <span>المراكز التأهيلية التخصصية — تقرير مشرفي السكن</span>
+  <span>${date} | ${new Date().toLocaleTimeString('ar-SA')}</span>
+</div>
+
+<script>window.onload = () => setTimeout(() => window.print(), 500);<\/script>
+</body></html>`
+
+    const w = window.open('', '_blank')
+    w.document.write(html)
+    w.document.close()
+  }
+
+  return (
+    <div className="animate-in">
+      {/* فلتر التاريخ */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+          <div className="form-group" style={{ flex: 1 }}>
+            <label>التاريخ</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+          <button className="btn btn-primary" onClick={load}>🔍 عرض</button>
+          <button
+            className="btn btn-danger"
+            onClick={doPrint}
+            disabled={!records.length}
+          >
+            🖨️ تصدير PDF
+          </button>
+        </div>
+      </div>
+
+      {loading && <div style={{ height: 200 }} className="skeleton" />}
+
+      {!loading && records.length === 0 && (
+        <div className="empty-state">
+          <div className="es-icon">📭</div>
+          <div className="es-title">لا توجد تقارير لهذا التاريخ</div>
+          <div className="es-sub">اختر تاريخاً آخر أو تأكد من إدخال التقارير أولاً</div>
+        </div>
+      )}
+
+      {!loading && records.length > 0 && (
+        <>
+          {/* إحصاءات سريعة */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
+            {[
+              { label: 'مشرف نشط',           value: records.length, icon: '👤', color: 'var(--green)' },
+              { label: 'تعقيبات على مراكز',  value: records.reduce((s, r) => s + (r.otherCenters?.length || 0), 0), icon: '🏢', color: 'var(--blue)' },
+              { label: 'أنشطة أُشرف عليها', value: records.reduce((s, r) => s + (r.activities?.length  || 0), 0), icon: '🎯', color: 'var(--orange)' },
+              {
+                label: 'متوسط النسبة التقديرية',
+                value: (() => { const s = records.filter(r => +r.generalScore > 0); return s.length ? Math.round(s.reduce((t, r) => t + (+r.generalScore), 0) / s.length) + '%' : '—' })(),
+                icon: '📊', color: 'var(--accent)'
+              },
+            ].map((s, i) => (
+              <div key={i} className="stat-card" style={{ '--card-accent': s.color }}>
+                <div className="stat-icon">{s.icon}</div>
+                <div className="stat-value">{s.value}</div>
+                <div className="stat-label">{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* الجدول */}
+          <div className="card">
+            <div className="card-title">📋 تفاصيل أداء المشرفين — {date}</div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: 30 }}>#</th>
+                    <th>المشرف</th>
+                    <th>الجناح الأساسي</th>
+                    <th>الأجنحة الأخرى</th>
+                    <th style={{ width: 80 }}>النسبة التقديرية</th>
+                    <th style={{ width: 80 }}>إنجاز المهام</th>
+                    <th>الأنشطة</th>
+                    <th>ملاحظات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((r, i) => {
+                    const pct   = taskPct(r.tasks)
+                    const pctN  = parseInt(pct)
+                    const score = r.generalScore ? +r.generalScore : null
+                    const pctColor  = isNaN(pctN)  ? 'var(--text-muted)' : pctN  >= 80 ? 'var(--green)' : pctN  >= 60 ? 'var(--orange)' : 'var(--red)'
+                    const scoreColor = !score ? 'var(--text-muted)' : score >= 80 ? 'var(--green)' : score >= 60 ? 'var(--orange)' : 'var(--red)'
+                    const hasObs = r.obs?.amni || r.obs?.fanni || r.obs?.baramij
+
+                    return (
+                      <tr key={r.id}>
+                        <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--accent)' }}>{i + 1}</td>
+                        <td style={{ fontWeight: 700 }}>{r.savedBy || '—'}</td>
+                        <td style={{ fontSize: 12 }}>{wingLabel(r.wing)}</td>
+                        <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          {(r.otherCenters || []).length > 0
+                            ? (r.otherCenters || []).map((c, ci) => (
+                                <div key={ci}>{wingLabel(c.wing)}</div>
+                              ))
+                            : '—'}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          {score
+                            ? <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: scoreColor + '18', color: scoreColor, border: `1px solid ${scoreColor}44` }}>{score}%</span>
+                            : <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>—</span>}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: pctColor + '18', color: pctColor, border: `1px solid ${pctColor}44` }}>
+                            {pct}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: 11 }}>
+                          {(r.activities || []).length > 0
+                            ? (r.activities || []).map((a, ai) => (
+                                <div key={ai} style={{ marginBottom: 2 }}>
+                                  • {a.name || 'نشاط'} <span style={{ color: 'var(--text-muted)' }}>({a.type})</span>
+                                  {a.beneficiaries ? ` — ${a.beneficiaries} مستفيد` : ''}
+                                </div>
+                              ))
+                            : <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                        </td>
+                        <td style={{ fontSize: 11 }}>
+                          {hasObs ? (
+                            <div>
+                              {r.obs?.amni    && <div><span style={{ color: 'var(--red)',    fontWeight: 700 }}>🛡️</span> {r.obs.amni}</div>}
+                              {r.obs?.fanni   && <div><span style={{ color: 'var(--orange)', fontWeight: 700 }}>🔧</span> {r.obs.fanni}</div>}
+                              {r.obs?.baramij && <div><span style={{ color: 'var(--blue)',   fontWeight: 700 }}>📚</span> {r.obs.baramij}</div>}
+                            </div>
+                          ) : <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
