@@ -24,6 +24,8 @@ export default function Topbar({ activePage, onNav }) {
       ? { id: 'reports',    label: 'التقارير',        icon: '📈' } : null,
     isAdmin || hasPerm('can_create_supervisors')
       ? { id: 'admin',      label: 'الإدارة',         icon: '⚙️' } : null,
+    isAdmin || hasPerm('attendance_entry') || hasPerm('attendance_reports')
+  ? { id: 'attendance', label: 'الموارد البشرية', icon: '👥' } : null,
   ].filter(Boolean)
 
   return (
