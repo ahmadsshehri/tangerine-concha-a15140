@@ -10,7 +10,9 @@ import ReportsPage       from './modules/reports/ReportsPage'
 import AdminPage         from './modules/admin/AdminPage'
 import MyReportsPage     from './modules/maintenance/MyReportsPage'
 import HousingReportPage from './modules/housing/HousingReportPage'
-
+import AttendancePage from './modules/attendance/AttendancePage'
+// وداخل الـ switch/render:
+case 'attendance': return <AttendancePage />
 // ─── صفحة رفض الوصول ──────────────────────────────────────────────────────────
 function AccessDenied({ onBack }) {
   return (
