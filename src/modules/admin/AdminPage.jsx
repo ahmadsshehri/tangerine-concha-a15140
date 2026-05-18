@@ -53,6 +53,9 @@ const ALL_PERMISSIONS = [
     ]
   },
   {
+   { key: 'attendance_entry',        label: 'إدخال الحضور اليومي' },
+{ key: 'attendance_manage_staff', label: 'إدارة الكوادر'       },
+{ key: 'attendance_reports',      label: 'تقارير الحضور'       },
     group: '👤 إدارة المستخدمين',
     perms: [
       { key: 'can_create_supervisors', label: 'إنشاء حسابات مشرفين جديدة' },
