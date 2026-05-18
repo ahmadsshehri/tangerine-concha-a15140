@@ -11,8 +11,7 @@ import AdminPage         from './modules/admin/AdminPage'
 import MyReportsPage     from './modules/maintenance/MyReportsPage'
 import HousingReportPage from './modules/housing/HousingReportPage'
 import AttendancePage from './modules/attendance/AttendancePage'
-// وداخل الـ switch/render:
-case 'attendance': return <AttendancePage />
+
 // ─── صفحة رفض الوصول ──────────────────────────────────────────────────────────
 function AccessDenied({ onBack }) {
   return (
@@ -146,6 +145,7 @@ function AppShell() {
       case 'reports':    return <ReportsPage />
       case 'myreports':  return <MyReportsPage />
       case 'admin':      return <AdminPage />
+        case 'attendance': return <AttendancePage />
       default:           return <HomePage onNav={setPage} allowed={allowed} />
     }
   }
