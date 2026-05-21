@@ -333,8 +333,8 @@ export default function CaretakerPage() {
                       <th></th>
                       {QDAYS.map((_, di) => (
                         <>
-                          <th key={`n${di}`} style={{fontSize:10}}>عدد</th>
-                          <th key={`h${di}`} style={{fontSize:10}}>ساعات</th>
+                          <th key={`n${di}`} style={{fontSize:10}}>عدد البرامج</th>
+                          <th key={`h${di}`} style={{fontSize:10}}>الحضور</th>
                         </>
                       ))}
                     </tr>
