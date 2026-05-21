@@ -8,7 +8,7 @@ export const DEFAULT_STATUSES = [
   { id: 'absent',   label: 'غائب',         color: 'red',    hasDetail: false },
   { id: 'leave',    label: 'إجازة',        color: 'orange', hasDetail: true  },
   { id: 'task',     label: 'مكلَّف',       color: 'gray',   hasDetail: true  },
-  { id: 'mission',  label: 'مأمورية',      color: 'blue',   hasDetail: true  },
+  { id: 'mission',  label: 'مهمة',      color: 'blue',   hasDetail: true  },
   { id: 'friday',   label: 'مسلم',         color: 'purple', hasDetail: false },
   { id: 'death',    label: 'حالة وفاة',    color: 'gray',   hasDetail: true  },
   { id: 'appt',     label: 'موعد',         color: 'blue',   hasDetail: true  },
@@ -28,7 +28,7 @@ export const DEFAULT_JOB_TYPES = [
 export const LEAVE_TYPES = [
   { id: 'annual',   label: 'اعتيادية' },
   { id: 'casual',   label: 'عرضية'    },
-  { id: 'death',    label: 'وفاة (أبوه)' },
+  { id: 'death',    label: 'حالة وفاة ' },
 ]
 
 export const TASK_DURATION_TYPES = [
@@ -49,7 +49,7 @@ export const APPT_TYPES = [
 ]
 
 export const PERMIT_TYPES = [
-  { id: 'reward',   label: 'مكافأة موارد' },
+  { id: 'reward',   label: 'مكافأة ' },
   { id: 'leave_req',label: 'استئذان'       },
 ]
 
