@@ -101,6 +101,8 @@ function AppShell() {
       id: 'myreports',  label: 'بلاغاتي',          icon: '🔧',
       show: !isAdmin && (hasPerm('reports_tool') || hasPerm('reports_facility')),
     },
+    { id: 'attendance', label: 'الموارد البشرية', icon: '👥',
+  show: isAdmin || hasPerm('attendance_entry') || hasPerm('attendance_manage_staff') || hasPerm('attendance_reports') }
     {
       id: 'admin',      label: 'الإدارة',           icon: '⚙️',
       show: isAdmin || hasPerm('can_create_supervisors'),
