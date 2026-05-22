@@ -86,6 +86,9 @@ const DEFAULT_SUPERVISOR_PERMS = {
   reports_view_all:        false,
   reports_followup:        false,
   can_create_supervisors:  false,
+  attendance_entry:        false,
+  attendance_manage_staff: false,
+  attendance_reports:      false,
 }
 
 export function usePermission(key) {
