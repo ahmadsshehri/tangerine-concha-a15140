@@ -12,7 +12,6 @@ import MyReportsPage     from './modules/maintenance/MyReportsPage'
 import HousingReportPage from './modules/housing/HousingReportPage'
 import AttendancePage from './modules/attendance/AttendancePage'
 
-// ─── صفحة رفض الوصول ──────────────────────────────────────────────────────────
 function AccessDenied({ onBack }) {
   return (
     <div className="empty-state" style={{ paddingTop: 80 }}>
@@ -28,7 +27,6 @@ function AccessDenied({ onBack }) {
   )
 }
 
-// ─── الصفحة الرئيسية ──────────────────────────────────────────────────────────
 function HomePage({ onNav, allowed }) {
   if (allowed.length === 0) return (
     <div className="empty-state" style={{ paddingTop: 100 }}>
@@ -73,7 +71,6 @@ function AppShell() {
   const userId = user?.uid || null
   useEffect(() => { setPage(null) }, [userId])
 
-  // ─── قائمة الصفحات المسموح بها لهذا المستخدم ─────────────────────────────
   const getAllowed = () => [
     {
       id: 'supervisor', label: 'التقييم المسائي',  icon: '🌙',
@@ -101,15 +98,17 @@ function AppShell() {
       id: 'myreports',  label: 'بلاغاتي',          icon: '🔧',
       show: !isAdmin && (hasPerm('reports_tool') || hasPerm('reports_facility')),
     },
-    { id: 'attendance', label: 'الموارد البشرية', icon: '👥',
-  show: isAdmin || hasPerm('attendance_entry') || hasPerm('attendance_manage_staff') || hasPerm('attendance_reports') }
     {
       id: 'admin',      label: 'الإدارة',           icon: '⚙️',
       show: isAdmin || hasPerm('can_create_supervisors'),
     },
+    // ✅ الإضافة الجديدة
+    {
+      id: 'attendance', label: 'الموارد البشرية',   icon: '👥',
+      show: isAdmin || hasPerm('attendance_entry') || hasPerm('attendance_manage_staff') || hasPerm('attendance_reports'),
+    },
   ].filter(p => p.show)
 
-  // ─── هل الصفحة مسموح بها؟ ────────────────────────────────────────────────
   const canAccess = (p) => {
     if (isAdmin) return true
     switch (p) {
@@ -122,6 +121,7 @@ function AppShell() {
                                 hasPerm('reports_view_all')
       case 'myreports':  return hasPerm('reports_tool')      || hasPerm('reports_facility')
       case 'admin':      return isAdmin || hasPerm('can_create_supervisors')
+      case 'attendance': return hasPerm('attendance_entry') || hasPerm('attendance_manage_staff') || hasPerm('attendance_reports') // ✅ الإضافة الجديدة
       default:           return false
     }
   }
@@ -147,7 +147,7 @@ function AppShell() {
       case 'reports':    return <ReportsPage />
       case 'myreports':  return <MyReportsPage />
       case 'admin':      return <AdminPage />
-        case 'attendance': return <AttendancePage />
+      case 'attendance': return <AttendancePage />
       default:           return <HomePage onNav={setPage} allowed={allowed} />
     }
   }
