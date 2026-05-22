@@ -59,6 +59,7 @@ export default function SupervisorPage() {
   const today = new Date().toISOString().split('T')[0]
 
   const [date,    setDate]    = useState(today)
+  const [selR,    setSelR]    = useState(1)
   const [selM,    setSelM]    = useState(null)
   const [selW,    setSelW]    = useState(null)
   const [saved,   setSaved]   = useState([])
@@ -91,7 +92,7 @@ export default function SupervisorPage() {
   const pickWing = (wing) => {
     setSelW(wing)
     const m = MASANDAT[selM]
-    const ex = saved.find(s => s.masandaId === m.id && String(s.wing) === String(wing))
+    const ex = saved.find(s => s.masandaId === m.id && String(s.wing) === String(wing) && (s.round || 1) === selR)
     if (ex) {
       setScores(AXES.map((ax, ai) => ax.items.map((_, ii) => ex.axes?.[ai]?.scores?.[ii] || 0)))
       setForm({
@@ -130,6 +131,7 @@ export default function SupervisorPage() {
     }))
     const data = {
       masandaId: m.id, masandaName: m.name, wing: selW,
+      round: selR,
       beneficiaries: +form.ben || 0,
       violations: +form.vio || 0,
       axes, totalScore,
@@ -138,7 +140,7 @@ export default function SupervisorPage() {
     }
     setSaving(true)
     try {
-      await setDoc(doc(db, 'wings', `${date}_${m.id}_${selW}`), data)
+      await setDoc(doc(db, 'wings', `${date}_${m.id}_${selW}_r${selR}`), data)
       toast(`✅ تم حفظ جناح ${selW} — ${m.name}`)
       await fetchSaved(date)
       setSelW(null); resetForm()
@@ -146,11 +148,12 @@ export default function SupervisorPage() {
     setSaving(false)
   }
 
-  const del = async (mid, wing) => {
+  const del = async (mid, wing, round) => {
     if (!isAdmin) { toast('❌ لا تملك صلاحية الحذف', 'error'); return }
     if (!confirm('حذف هذا الجناح نهائياً؟')) return
     try {
-      await deleteDoc(doc(db, 'wings', `${date}_${mid}_${wing}`))
+      const docId = round ? `${date}_${mid}_${wing}_r${round}` : `${date}_${mid}_${wing}`
+      await deleteDoc(doc(db, 'wings', docId))
       toast('🗑️ تم الحذف')
       await fetchSaved(date)
     } catch (e) { toast('❌ ' + e.message, 'error') }
@@ -189,8 +192,20 @@ export default function SupervisorPage() {
             <input readOnly value={info.month} />
           </div>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-          المشرف: <strong style={{ color: 'var(--accent)' }}>{name}</strong>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 10 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            المشرف: <strong style={{ color: 'var(--accent)' }}>{name}</strong>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>الجولة:</span>
+            {[1, 2].map(r => (
+              <button key={r} type="button"
+                className={`btn btn-sm ${selR === r ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => { setSelR(r); setSelM(null); setSelW(null); resetForm() }}>
+                جولة {r}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -199,7 +214,7 @@ export default function SupervisorPage() {
         <div className="card-title">الخطوة 1 — اختر المساندة</div>
         <div className="masanda-grid">
           {MASANDAT.map((ms, i) => {
-            const doneCount = saved.filter(s => s.masandaId === ms.id).length
+            const doneCount = saved.filter(s => s.masandaId === ms.id && (s.round || 1) === selR).length
             return (
               <div key={i} className={`masanda-card ${selM === i ? 'active' : ''}`} onClick={() => pickMasanda(i)}>
                 <div className="mc-name">{ms.name}</div>
@@ -216,7 +231,7 @@ export default function SupervisorPage() {
           <div className="card-title">الخطوة 2 — اختر الجناح ({m.name})</div>
           <div className="wing-grid">
             {m.wings.map(w => {
-              const done = saved.some(s => s.masandaId === m.id && String(s.wing) === String(w))
+              const done = saved.some(s => s.masandaId === m.id && String(s.wing) === String(w) && (s.round || 1) === selR)
               return (
                 <button key={w}
                   className={`wing-btn ${done ? 'filled' : ''} ${String(selW) === String(w) ? 'active' : ''}`}
@@ -233,7 +248,7 @@ export default function SupervisorPage() {
       {/* ─ Step 3: Form */}
       {selW !== null && (
         <div className="card animate-in" style={{ marginBottom: 14 }}>
-          <div className="card-title">📝 {m.name} — جناح {selW}</div>
+          <div className="card-title">📝 {m.name} — جناح {selW} — جولة {selR}</div>
 
           <div className="form-row fr-2" style={{ marginBottom: 16 }}>
             <div className="form-group">
@@ -291,12 +306,12 @@ export default function SupervisorPage() {
       {/* ─ Saved Wings */}
       {saved.length > 0 && (
         <div className="card animate-in">
-          <div className="card-title">✅ الأجنحة المُدخلة اليوم ({saved.length})</div>
+          <div className="card-title">✅ الأجنحة المُدخلة — جولة {selR} ({saved.filter(s => (s.round || 1) === selR).length})</div>
           {loading ? (
             <div style={{ height: 40 }} className="skeleton" />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {saved.map((w, i) => (
+              {saved.filter(s => (s.round || 1) === selR).map((w, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   background: 'var(--surface2)', border: '1px solid var(--border)',
@@ -310,11 +325,11 @@ export default function SupervisorPage() {
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button className="btn btn-blue btn-xs"
-                      onClick={() => { setSelM(MASANDAT.findIndex(ms => ms.id === w.masandaId)); pickWing(w.wing) }}>
+                      onClick={() => { setSelR(w.round || 1); setSelM(MASANDAT.findIndex(ms => ms.id === w.masandaId)); pickWing(w.wing) }}>
                       تعديل
                     </button>
                     {(isAdmin || hasPerm('supervisor_delete')) && (
-                      <button className="btn btn-danger btn-xs" onClick={() => del(w.masandaId, w.wing)}>
+                      <button className="btn btn-danger btn-xs" onClick={() => del(w.masandaId, w.wing, w.round)}>
                         حذف
                       </button>
                     )}
