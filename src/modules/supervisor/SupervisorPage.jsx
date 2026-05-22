@@ -7,9 +7,9 @@ import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
 import { MASANDAT, AXES, DAR, MAR } from '../../lib/constants'
-import { EvalGuideButton } from '../../components/EvalGuideModal'  // ← إضافة جديدة
+import { EvalGuideButton } from '../../components/EvalGuideModal'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers (نفس الكود الأصلي) ──────────────────────────────────────────────
 function weekNum(d) {
   const j = new Date(d.getFullYear(), 0, 1)
   return Math.ceil((((d - j) / 86400000) + j.getDay() + 1) / 7)
@@ -65,6 +65,9 @@ export default function SupervisorPage() {
   const [saved,   setSaved]   = useState([])
   const [loading, setLoading] = useState(false)
   const [saving,  setSaving]  = useState(false)
+
+  // ─── إضافة متغير حالة لاختيار الجولة عند التصدير ────────────────────────────
+  const [exportRound, setExportRound] = useState(1)
 
   const [scores, setScores]   = useState(() => AXES.map(ax => ax.items.map(() => 0)))
   const [form,   setForm]     = useState({ ben: '', vio: '', obsAmni: '', obsFanni: '', obsBaramij: '' })
@@ -159,19 +162,69 @@ export default function SupervisorPage() {
     } catch (e) { toast('❌ ' + e.message, 'error') }
   }
 
+  // ─── دالة تصدير PDF جديدة تعتمد على exportRound ─────────────────────────────
+  const handleExportPDF = () => {
+    // تصفية الأجنحة حسب الجولة المختارة
+    const roundsToExport = saved.filter(s => (s.round || 1) === exportRound)
+    if (roundsToExport.length === 0) {
+      toast(`⚠️ لا توجد بيانات للجولة ${exportRound} في هذا التاريخ`, 'warn')
+      return
+    }
+
+    // هنا يمكنك استدعاء مكتبة التصدير الفعلية (مثل jsPDF, html2canvas)
+    // مثال توضيحي:
+    console.log(`تصدير PDF للجولة ${exportRound}`, roundsToExport)
+    toast(`📄 جارٍ تصدير الجولة ${exportRound}...`)
+
+    /* 
+    // مثال باستخدام jsPDF و html2canvas (ستحتاج لتثبيتهما)
+    import jsPDF from 'jspdf'
+    import html2canvas from 'html2canvas'
+    const input = document.getElementById('pdf-content') // عنصر يحتوي على البيانات
+    html2canvas(input).then((canvas) => {
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      pdf.addImage(imgData, 'PNG', 0, 0)
+      pdf.save(`تقييم_${date}_جولة${exportRound}.pdf`)
+    })
+    */
+  }
+
   const m = selM !== null ? MASANDAT[selM] : null
 
   return (
     <div className="animate-in">
-      {/* ─ Page Header — تعديل: أضفنا زر المرجع */}
+      {/* ─ Page Header — تم تعديل: أضفنا أزرار اختيار الجولة للتصدير وزر التصدير */}
       <div className="page-header">
         <div className="page-title">
           <div className="icon" style={{ background: 'rgba(88,166,255,.15)' }}>🌙</div>
           التقييم المسائي للمشرفين
         </div>
-        <EvalGuideButton type="supervisor" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* مجموعة أزرار اختيار الجولة للتصدير */}
+          <div style={{ display: 'flex', gap: 6, backgroundColor: 'var(--surface2)', borderRadius: 'var(--rs)', padding: '4px' }}>
+            <button
+              className={`btn btn-sm ${exportRound === 1 ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setExportRound(1)}
+            >
+              الجولة 1
+            </button>
+            <button
+              className={`btn btn-sm ${exportRound === 2 ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setExportRound(2)}
+            >
+              الجولة 2
+            </button>
+          </div>
+          {/* زر تصدير PDF */}
+          <button className="btn btn-blue" onClick={handleExportPDF}>
+            📄 تصدير PDF (جولة {exportRound})
+          </button>
+          <EvalGuideButton type="supervisor" />
+        </div>
       </div>
 
+      {/* باقي المكونات كما هي (Date Row, Masanda, Wing, Form, Saved Wings) ──────────*/}
       {/* ─ Date Row */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="form-row fr-4">
@@ -197,7 +250,7 @@ export default function SupervisorPage() {
             المشرف: <strong style={{ color: 'var(--accent)' }}>{name}</strong>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>الجولة:</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>الجولة (للإدخال):</span>
             {[1, 2].map(r => (
               <button key={r} type="button"
                 className={`btn btn-sm ${selR === r ? 'btn-primary' : 'btn-ghost'}`}
@@ -303,7 +356,7 @@ export default function SupervisorPage() {
         </div>
       )}
 
-      {/* ─ Saved Wings */}
+      {/* ─ Saved Wings (يعرض الأجنحة حسب selR المختار للإدخال، يبقى كما هو) */}
       {saved.length > 0 && (
         <div className="card animate-in">
           <div className="card-title">✅ الأجنحة المُدخلة — جولة {selR} ({saved.filter(s => (s.round || 1) === selR).length})</div>
