@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore'
+import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { DEFAULT_STATUSES, DEFAULT_JOB_TYPES, COLOR_MAP } from './attendanceConstants'
 
@@ -34,7 +34,18 @@ function ItemEditor({ title, collection: colName, defaults }) {
   const load = useCallback(async () => {
     const snap = await getDocs(collection(db, colName))
     if (snap.empty) {
-      setItems(defaults)
+      // بذر القيم الافتراضية في Firestore بمعرفاتها الأصلية حتى تعمل ارتباطات النظام
+      const batch = writeBatch(db)
+      defaults.forEach(item => {
+        batch.set(doc(db, colName, item.id), {
+          label:     item.label,
+          color:     item.color,
+          hasDetail: !!item.hasDetail,
+          _system:   true,
+        })
+      })
+      await batch.commit()
+      setItems(defaults.map(d => ({ ...d, _system: true })))
     } else {
       setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     }
@@ -52,11 +63,13 @@ function ItemEditor({ title, collection: colName, defaults }) {
     setSaving(true)
     try {
       const id = form.id || `item_${Date.now()}`
-      await setDoc(doc(db, colName, id), {
+      const data = {
         label:     form.label.trim(),
         color:     form.color,
         hasDetail: !!form.hasDetail,
-      })
+      }
+      if (form._system) data._system = true
+      await setDoc(doc(db, colName, id), data)
       close()
       load()
     } catch(e) { console.error(e) }
@@ -150,7 +163,6 @@ function ItemEditor({ title, collection: colName, defaults }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
 export default function AttendanceSettings() {
   return (
     <div>
