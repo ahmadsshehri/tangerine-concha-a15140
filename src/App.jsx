@@ -102,7 +102,6 @@ function AppShell() {
       id: 'admin',      label: 'الإدارة',           icon: '⚙️',
       show: isAdmin || hasPerm('can_create_supervisors'),
     },
-    // ✅ الإضافة الجديدة
     {
       id: 'attendance', label: 'الموارد البشرية',   icon: '👥',
       show: isAdmin || hasPerm('attendance_entry') || hasPerm('attendance_manage_staff') || hasPerm('attendance_reports'),
@@ -121,7 +120,7 @@ function AppShell() {
                                 hasPerm('reports_view_all')
       case 'myreports':  return hasPerm('reports_tool')      || hasPerm('reports_facility')
       case 'admin':      return isAdmin || hasPerm('can_create_supervisors')
-      case 'attendance': return hasPerm('attendance_entry') || hasPerm('attendance_manage_staff') || hasPerm('attendance_reports') // ✅ الإضافة الجديدة
+      case 'attendance': return hasPerm('attendance_entry') || hasPerm('attendance_manage_staff') || hasPerm('attendance_reports')
       default:           return false
     }
   }
