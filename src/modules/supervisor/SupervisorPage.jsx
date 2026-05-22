@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   collection, query, where, getDocs,
   doc, setDoc, deleteDoc
@@ -9,7 +9,7 @@ import { useToast } from '../../components/Toast'
 import { MASANDAT, AXES, DAR, MAR } from '../../lib/constants'
 import { EvalGuideButton } from '../../components/EvalGuideModal'
 
-// ─── Helpers (نفس الكود الأصلي) ──────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function weekNum(d) {
   const j = new Date(d.getFullYear(), 0, 1)
   return Math.ceil((((d - j) / 86400000) + j.getDay() + 1) / 7)
@@ -66,13 +66,14 @@ export default function SupervisorPage() {
   const [loading, setLoading] = useState(false)
   const [saving,  setSaving]  = useState(false)
 
-  // ─── إضافة متغير حالة لاختيار الجولة عند التصدير ────────────────────────────
-  const [exportRound, setExportRound] = useState(1)
+  // متغير لاختيار الجولة عند الطباعة
+  const [printRound, setPrintRound] = useState(1)
 
   const [scores, setScores]   = useState(() => AXES.map(ax => ax.items.map(() => 0)))
   const [form,   setForm]     = useState({ ben: '', vio: '', obsAmni: '', obsFanni: '', obsBaramij: '' })
 
   const info = dateInfo(date)
+  const printContentRef = useRef(null) // مرجع للمحتوى المراد طباعته
 
   const fetchSaved = useCallback(async (d) => {
     if (!d) return
@@ -162,63 +163,127 @@ export default function SupervisorPage() {
     } catch (e) { toast('❌ ' + e.message, 'error') }
   }
 
-  // ─── دالة تصدير PDF جديدة تعتمد على exportRound ─────────────────────────────
-  const handleExportPDF = () => {
-    // تصفية الأجنحة حسب الجولة المختارة
-    const roundsToExport = saved.filter(s => (s.round || 1) === exportRound)
-    if (roundsToExport.length === 0) {
-      toast(`⚠️ لا توجد بيانات للجولة ${exportRound} في هذا التاريخ`, 'warn')
+  // ─── دالة الطباعة ─────────────────────────────────────────────────────────
+  const handlePrint = () => {
+    // تصفية البيانات حسب الجولة المختارة للطباعة
+    const roundsToPrint = saved.filter(s => (s.round || 1) === printRound)
+    if (roundsToPrint.length === 0) {
+      toast(`⚠️ لا توجد بيانات للجولة ${printRound} في هذا التاريخ`, 'warn')
       return
     }
 
-    // هنا يمكنك استدعاء مكتبة التصدير الفعلية (مثل jsPDF, html2canvas)
-    // مثال توضيحي:
-    console.log(`تصدير PDF للجولة ${exportRound}`, roundsToExport)
-    toast(`📄 جارٍ تصدير الجولة ${exportRound}...`)
-
-    /* 
-    // مثال باستخدام jsPDF و html2canvas (ستحتاج لتثبيتهما)
-    import jsPDF from 'jspdf'
-    import html2canvas from 'html2canvas'
-    const input = document.getElementById('pdf-content') // عنصر يحتوي على البيانات
-    html2canvas(input).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      pdf.addImage(imgData, 'PNG', 0, 0)
-      pdf.save(`تقييم_${date}_جولة${exportRound}.pdf`)
-    })
-    */
+    // تجهيز محتوى HTML للطباعة
+    const printWindow = window.open('', '_blank')
+    printWindow.document.write(`
+      <html dir="rtl">
+        <head>
+          <title>تقييم المشرفين - ${date} - جولة ${printRound}</title>
+          <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: white; color: black; }
+            .print-header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #ccc; padding-bottom: 10px; }
+            .print-header h1 { margin: 0; font-size: 24px; }
+            .print-header p { margin: 5px 0; color: #555; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+            th { background-color: #f2f2f2; font-weight: bold; }
+            .axis-details { margin-top: 10px; }
+            .axis-details h4 { margin: 10px 0 5px; background: #f9f9f9; padding: 4px; }
+            .obs-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            .obs-table th, .obs-table td { border: 1px solid #ddd; padding: 6px; text-align: right; }
+            .obs-table th { background: #f0f0f0; }
+            .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #777; border-top: 1px solid #ccc; padding-top: 10px; }
+            .badge { background: #4CAF50; color: white; padding: 2px 6px; border-radius: 12px; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="print-header">
+            <h1>تقرير التقييم المسائي للمشرفين</h1>
+            <p>التاريخ: ${info.day} - ${date} | الأسبوع: ${info.week} | الشهر: ${info.month}</p>
+            <p>الجولة: ${printRound} | عدد الأجنحة المدخلة: ${roundsToPrint.length}</p>
+          </div>
+          <table>
+            <thead>
+              <tr><th>المساندة</th><th>الجناح</th><th>المستفيدين</th><th>المخالفات</th><th>مجموع النقاط</th><th>تم الإدخال بواسطة</th></tr>
+            </thead>
+            <tbody>
+              ${roundsToPrint.map(w => `
+                <tr>
+                  <td>${w.masandaName}</td>
+                  <td>${w.wing}</td>
+                  <td>${w.beneficiaries || 0}</td>
+                  <td>${w.violations || 0}</td>
+                  <td>${w.totalScore} / 60</td>
+                  <td>${w.savedBy || ''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="axis-details">
+            <h4>تفاصيل المحاور والدرجات</h4>
+            ${roundsToPrint.map(w => `
+              <div style="margin-bottom: 25px; border:1px solid #eee; padding: 10px;">
+                <strong>${w.masandaName} - جناح ${w.wing}</strong>
+                <table style="margin-top:8px; width:100%">
+                  <thead><tr><th>المحور</th><th>الدرجات (تفصيل 5 عناصر)</th><th>المجموع</th></tr></thead>
+                  <tbody>
+                    ${(w.axes || []).map(ax => `
+                      <tr>
+                        <td>${ax.label}</td>
+                        <td>${ax.scores ? ax.scores.join(' - ') : ''}</td>
+                        <td>${ax.total || 0} / 15</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+                <div style="margin-top: 12px;">
+                  <strong>ملاحظات:</strong><br/>
+                  الأمنية: ${w.obs?.amni || '—'}<br/>
+                  الفنية: ${w.obs?.fanni || '—'}<br/>
+                  البرامج: ${w.obs?.baramij || '—'}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          <div class="footer">
+            تم الطباعة بواسطة ${name} - ${new Date().toLocaleString()}
+          </div>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+    printWindow.print()
+    printWindow.onafterprint = () => printWindow.close()
   }
 
   const m = selM !== null ? MASANDAT[selM] : null
 
   return (
     <div className="animate-in">
-      {/* ─ Page Header — تم تعديل: أضفنا أزرار اختيار الجولة للتصدير وزر التصدير */}
+      {/* ─ Page Header — مع أزرار اختيار الجولة للطباعة وزر الطباعة */}
       <div className="page-header">
         <div className="page-title">
           <div className="icon" style={{ background: 'rgba(88,166,255,.15)' }}>🌙</div>
           التقييم المسائي للمشرفين
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* مجموعة أزرار اختيار الجولة للتصدير */}
+          {/* مجموعة أزرار اختيار الجولة للطباعة */}
           <div style={{ display: 'flex', gap: 6, backgroundColor: 'var(--surface2)', borderRadius: 'var(--rs)', padding: '4px' }}>
             <button
-              className={`btn btn-sm ${exportRound === 1 ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setExportRound(1)}
+              className={`btn btn-sm ${printRound === 1 ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setPrintRound(1)}
             >
               الجولة 1
             </button>
             <button
-              className={`btn btn-sm ${exportRound === 2 ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setExportRound(2)}
+              className={`btn btn-sm ${printRound === 2 ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setPrintRound(2)}
             >
               الجولة 2
             </button>
           </div>
-          {/* زر تصدير PDF */}
-          <button className="btn btn-blue" onClick={handleExportPDF}>
-            📄 تصدير PDF (جولة {exportRound})
+          {/* زر الطباعة */}
+          <button className="btn btn-blue" onClick={handlePrint}>
+            🖨️ طباعة (جولة {printRound})
           </button>
           <EvalGuideButton type="supervisor" />
         </div>
@@ -356,7 +421,7 @@ export default function SupervisorPage() {
         </div>
       )}
 
-      {/* ─ Saved Wings (يعرض الأجنحة حسب selR المختار للإدخال، يبقى كما هو) */}
+      {/* ─ Saved Wings */}
       {saved.length > 0 && (
         <div className="card animate-in">
           <div className="card-title">✅ الأجنحة المُدخلة — جولة {selR} ({saved.filter(s => (s.round || 1) === selR).length})</div>
