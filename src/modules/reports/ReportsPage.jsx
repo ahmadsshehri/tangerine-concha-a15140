@@ -237,7 +237,7 @@ function DailyReport() {
   const [prevWings, setPrevWings] = useState([])
   const [showPrev,  setShowPrev]  = useState(false)
   const [loading,   setLoading]   = useState(false)
-  const [roundFilter, setRoundFilter] = useState('all') // ← جديد: all, 1, 2
+  const [roundFilter, setRoundFilter] = useState('all') // 'all', '1', '2'
 
   const load = useCallback(async () => {
     if (!date) return
@@ -245,9 +245,7 @@ function DailyReport() {
     try {
       const q = query(collection(db, 'wings'), where('date', '==', date))
       const s = await getDocs(q)
-      let allWings = s.docs.map(d => d.data())
-      setWings(allWings)
-
+      setWings(s.docs.map(d => d.data()))
       const pd = new Date(date + 'T12:00:00')
       pd.setDate(pd.getDate() - 1)
       const prevStr = pd.toISOString().split('T')[0]
@@ -262,12 +260,11 @@ function DailyReport() {
 
   // تصفية حسب الجولة
   const filteredWings = wings.filter(w => {
-    const round = w.round || 1  // إذا لم يوجد حقل round نعتبره جولة 1 (للتوافق مع القديم)
+    const round = w.round || 1
     if (roundFilter === 'all') return true
     return String(round) === String(roundFilter)
   })
 
-  // الإحصائيات بناءً على المفلتر
   const byM = {}
   MASANDAT.forEach(m => byM[m.id] = [])
   filteredWings.forEach(w => { if (byM[w.masandaId]) byM[w.masandaId].push(w) })
@@ -299,25 +296,81 @@ function DailyReport() {
   const bg    = v => v >= 83 ? '#e3f9ee' : v >= 58 ? '#fef3c7' : '#fde8e8'
   const pilC  = pct => pct >= 83 ? 'pill-g' : pct >= 58 ? 'pill-o' : 'pill-r'
 
-  const PRINT_CSS = `...` // (نفس الـ CSS الموجود، لم يتغير)
+  const PRINT_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Cairo',sans-serif;background:#fff;color:#1e2533;direction:rtl;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.print-header{background:linear-gradient(135deg,#1e3a8a,#1a56db);color:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.ph-right{display:flex;flex-direction:column;gap:3px;} .ph-title{font-size:17px;font-weight:900;} .ph-badge{background:rgba(255,255,255,.2);border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;margin-top:4px;display:inline-block;} .ph-left{text-align:left;font-size:11px;opacity:.85;line-height:1.7;}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;padding:0 4px;}
+.stat-box{border-radius:8px;padding:10px 12px;text-align:center;} .stat-box-b{background:#ebf0fd;border:1.5px solid #1a56db;} .stat-box-r{background:#fde8e8;border:1.5px solid #c81e1e;} .stat-box-o{background:#fef3c7;border:1.5px solid #b45309;} .stat-box-g{background:#e3f9ee;border:1.5px solid #057a55;}
+.stat-val{font-size:22px;font-weight:900;line-height:1;} .stat-val-b{color:#1a56db;} .stat-val-r{color:#c81e1e;} .stat-val-o{color:#b45309;} .stat-val-g{color:#057a55;} .stat-lbl{font-size:10px;color:#5f6b7e;font-weight:700;margin-top:3px;}
+.sec{margin-bottom:10px;padding:0 4px;} .sec-title{font-size:11px;font-weight:800;color:#1a56db;padding:6px 10px;background:#ebf0fd;border-right:4px solid #1a56db;border-radius:0 6px 6px 0;margin-bottom:7px;}
+table{width:100%;border-collapse:collapse;font-size:10px;} th{background:#1a56db;color:#fff;padding:6px 8px;text-align:right;font-weight:700;font-size:10px;} td{padding:5px 8px;border-bottom:1px solid #e2e6ed;font-weight:500;} tr:nth-child(even) td{background:#f8f9fb;} tr.total-row td{background:#ebf0fd;font-weight:800;color:#1a56db;border-top:2px solid #1a56db;}
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;} .pill-g{background:#e3f9ee;color:#057a55;border:1px solid #057a55;} .pill-o{background:#fef3c7;color:#b45309;border:1px solid #b45309;} .pill-r{background:#fde8e8;color:#c81e1e;border:1px solid #c81e1e;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;padding:0 4px;} .rank-box{border-radius:8px;overflow:hidden;border:1px solid #e2e6ed;} .rank-hdr{padding:7px 12px;font-size:11px;font-weight:800;} .rank-hdr-g{background:#057a55;color:#fff;} .rank-hdr-r{background:#c81e1e;color:#fff;} .rank-item{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;border-top:1px solid #eef1f5;font-size:10px;}
+.notes-box{border-radius:8px;padding:10px 12px;margin-bottom:8px;} .note-hdr{font-size:10px;font-weight:800;margin-bottom:5px;} .note-row{display:grid;grid-template-columns:70px 80px 1fr;gap:6px;font-size:10px;padding:3px 0;}
+.notes-box.notes-red{background:#fde8e8;border:1px solid #f5a3a3;} .notes-box.notes-red .note-hdr{color:#c81e1e;} .notes-box.notes-red .note-row{border-bottom:1px solid #f8caca;}
+.notes-box.notes-yellow{background:#fef3c7;border:1px solid #fbbf24;} .notes-box.notes-yellow .note-hdr{color:#b45309;} .notes-box.notes-yellow .note-row{border-bottom:1px solid #fde68a;}
+.notes-box.notes-green{background:#e3f9ee;border:1px solid #86d7b0;} .notes-box.notes-green .note-hdr{color:#057a55;} .notes-box.notes-green .note-row{border-bottom:1px solid #bfead3;}
+.print-footer{border-top:2px solid #e2e6ed;margin-top:14px;padding:8px 4px 0;display:flex;justify-content:space-between;font-size:9px;color:#9aa3b0;}
+@media print{@page{size:A4;margin:8mm;}body{font-size:10px;}.no-break{page-break-inside:avoid;}button{display:none!important;}}`
 
-  // دوال الطباعة و Excel تستخدم filteredWings بدلاً من wings
   const doPrint = () => {
-    if (!filteredWings.length) { toast('⚠️ لا توجد بيانات للجولة المحددة', 'warn'); return }
+    if (!filteredWings.length) {
+      toast('⚠️ لا توجد بيانات للجولة المحددة', 'warn')
+      return
+    }
     const notesHtml = ['amni','fanni','baramij'].some(k => filteredWings.some(w => w.obs?.[k]))
       ? `<div class="sec no-break"><div class="sec-title">📝 رابعاً: الملاحظات المرصودة</div>${
           [{key:'amni',label:'🛡️ أمني',cls:'notes-red'},{key:'fanni',label:'🔧 فني',cls:'notes-yellow'},{key:'baramij',label:'📚 برامج',cls:'notes-green'}]
           .map(item => { const rows=filteredWings.filter(w=>w.obs?.[item.key]); if(!rows.length)return ''; return `<div class="notes-box ${item.cls}"><div class="note-hdr">${item.label}</div>${rows.map(w=>`<div class="note-row"><span><strong>جناح ${w.wing}</strong></span><span>${w.masandaName}</span><span>${w.obs[item.key]}</span></div>`).join('')}</div>`; }).join('')
         }</div>` : ''
 
-    const html = `<!DOCTYPE html>...` // نفس هيكل الطباعة مع استبدال wings بـ filteredWings
-    // ... باقي المحتوى كما هو ولكن استخدم filteredWings بدلاً من wings
-    // (للتوفير، سأكتب النقطة المهمة فقط، لكن يمكنك نسخ الهيكل القديم مع تغيير المتغير)
-    // بما أن الكود طويل، سأذكر التغيير الجوهري: استخدم filteredWings داخل html
+    const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><style>${PRINT_CSS}</style></head><body>
+<div class="print-header">
+  <div class="ph-right"><div class="ph-title">📊 التقرير اليومي — الفترة المسائية ${roundFilter !== 'all' ? `(جولة ${roundFilter})` : ''}</div><div class="ph-badge">المراكز التأهيلية التخصصية</div></div>
+  <div class="ph-left"><div>📅 ${DAR_AR[d.getDay()]} | ${date}</div><div>👤 أعده: ${uName}</div><div>🕐 ${new Date().toLocaleTimeString('ar-SA')}</div></div>
+</div>
+<div class="stats-row no-break">
+  <div class="stat-box stat-box-b"><div class="stat-val stat-val-b">${tB.toLocaleString()}</div><div class="stat-lbl">إجمالي المستفيدين</div></div>
+  <div class="stat-box stat-box-r"><div class="stat-val stat-val-r">${tV}</div><div class="stat-lbl">إجمالي المخالفات</div></div>
+  <div class="stat-box stat-box-o"><div class="stat-val stat-val-o">${gA.toFixed(1)}</div><div class="stat-lbl">متوسط الدرجات / 60</div></div>
+  <div class="stat-box stat-box-g"><div class="stat-val stat-val-g">${filteredWings.length}</div><div class="stat-lbl">أجنحة مُقيَّمة</div></div>
+</div>
+<div class="sec no-break"><div class="sec-title">📋 أولاً: تفصيل الأجنحة</div>
+<table>
+<thead><tr><th>الجناح</th><th>المساندة</th><th>المستفيدون</th><th>المخالفات</th><th>الالتزام/15</th><th>السلوك/15</th><th>التفاعل/15</th><th>السكن/15</th><th>الإجمالي/60</th><th>المدخِل</th></tr></thead>
+<tbody>${filteredWings.map(w=>{const pct=(w.totalScore/60)*100;return`<tr><td><strong>جناح ${w.wing}</strong></td><td>${w.masandaName}</td><td>${w.beneficiaries||'—'}</td><td style="color:#c81e1e;font-weight:800">${w.violations||0}</td>${w.axes.map(a=>`<td style="text-align:center">${a.total}</td>`).join('')}<td><span class="pill ${pilC(pct)}">${w.totalScore}/60</span></td><td style="color:#5f6b7e">${w.savedBy||'—'}</td></tr>`;}).join('')}
+<tr class="total-row"><td colspan="2"><strong>الإجمالي</strong></td><td>${tB}</td><td>${tV}</td><td colspan="4"></td><td><strong>${gA.toFixed(1)}/60</strong></td><td></td></tr>
+</tbody></table></div>
+<div class="sec no-break"><div class="sec-title">📊 ثانياً: ملخص بالمساندة</div>
+<table>
+<thead><tr><th>المساندة</th><th>أجنحة مُقيَّمة</th><th>المستفيدون</th><th>المخالفات</th><th>متوسط الدرجة</th><th>التقييم</th></tr></thead>
+<tbody>${sum.map(x=>{const pct=(x.avg/60)*100;return`<tr><td><strong>${x.m.name}</strong></td><td style="text-align:center">${x.ws.length}/${x.m.wings.length}</td><td>${x.ben}</td><td style="color:#c81e1e;font-weight:700">${x.vio}</td><td style="text-align:center">${x.avg.toFixed(1)}/60</td><td><span class="pill ${pilC(pct)}">${pct>=83?'ممتاز':pct>=58?'متوسط':'ضعيف'}</span></td></tr>`;}).join('')}</tbody>
+</table></div>
+<div class="two-col no-break">
+  <div class="rank-box"><div class="rank-hdr rank-hdr-g">🏆 أفضل 3 مساندات</div>${best.map((x,i)=>`<div class="rank-item"><span>${['🥇','🥈','🥉'][i]} ${x.m.name}</span><span class="pill pill-g">${x.avg.toFixed(1)}/60</span></div>`).join('')}</div>
+  <div class="rank-box"><div class="rank-hdr rank-hdr-r">⚠️ تحتاج متابعة</div>${worst.map((x,i)=>`<div class="rank-item"><span>🔻${i+1} ${x.m.name}</span><span class="pill pill-r">${x.avg.toFixed(1)}/60</span></div>`).join('')}</div>
+</div>
+${notesHtml}
+<div class="print-footer"><span>📅 ${new Date().toLocaleDateString('ar-SA')} — ${new Date().toLocaleTimeString('ar-SA')}</span><span>المراكز التأهيلية التخصصية</span></div>
+<script>window.onload=()=>setTimeout(()=>window.print(),600);<\/script></body></html>`
+
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast('❌ تم منع النافذة المنبثقة. يرجى السماح للنوافذ المنبثقة لهذا الموقع.', 'error')
+      return
+    }
+    printWindow.document.write(html)
+    printWindow.document.close()
   }
 
   const doExcel = () => {
-    if (!filteredWings.length) { toast('⚠️ لا توجد بيانات للجولة المحددة', 'warn'); return }
+    if (!filteredWings.length) {
+      toast('⚠️ لا توجد بيانات للجولة المحددة', 'warn')
+      return
+    }
     const h1 = ['الجناح','المساندة','المستفيدون','المخالفات','الالتزام/15','السلوك/15','التفاعل/15','السكن/15','الإجمالي/60','المدخِل']
     const r1 = filteredWings.map(w => [`جناح ${w.wing}`, w.masandaName, w.beneficiaries||0, w.violations||0, ...w.axes.map(a=>a.total), w.totalScore, w.savedBy||''])
     exportToExcel(r1, h1, `التقرير-اليومي-جولة${roundFilter==='all'?'كل':roundFilter}-${date}`)
@@ -358,7 +411,6 @@ function DailyReport() {
 
       {!loading && filteredWings.length > 0 && (
         <>
-          {/* نفس باقي العرض ولكن استخدم filteredWings بدلاً من wings في كل مكان */}
           <div style={{ background:'linear-gradient(135deg,#1e3a8a,#1a56db)', borderRadius:'var(--r)', padding:'20px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16, color:'#fff' }}>
             <div>
               <div style={{ fontSize:18, fontWeight:900 }}>🏛️ التقرير اليومي — الفترة المسائية {roundFilter !== 'all' && `(جولة ${roundFilter})`}</div>
@@ -383,47 +435,134 @@ function DailyReport() {
 
           <div className="card" style={{ marginBottom:14 }}>
             <div className="card-title">📋 أولاً: ملخص الأداء — تفصيل الأجنحة</div>
-            <div className="table-wrap"><table>
-              <thead><tr><th>الجناح</th><th>المساندة</th><th>المستفيدون</th><th>المخالفات</th><th>الالتزام/15</th><th>السلوك/15</th><th>التفاعل/15</th><th>السكن/15</th><th>الإجمالي/60</th><th>المدخِل</th></tr></thead>
-              <tbody>
-                {filteredWings.map((w,i)=>{
-                  const pct=(w.totalScore/60)*100
-                  return (<tr key={i}>
-                    <td style={{fontWeight:800}}>جناح {w.wing}</td>
-                    <td style={{fontSize:12}}>{w.masandaName}</td>
-                    <td style={{textAlign:'center',color:'#1a56db',fontWeight:700}}>{w.beneficiaries||'—'}</td>
-                    <td style={{textAlign:'center',color:'#c81e1e',fontWeight:700}}>{w.violations||0}</td>
-                    {w.axes.map((a,ai)=><td key={ai} style={{textAlign:'center',fontSize:12}}>{a.total}/15</td>)}
-                    <td>
-                      <div style={{display:'flex',alignItems:'baseline',gap:4}}>
-                        <span style={{display:'inline-block',padding:'2px 10px',borderRadius:20,fontSize:12,fontWeight:800,background:bg(pct),color:sc(pct),border:`1px solid ${sc(pct)}`}}>{w.totalScore}/60</span>
-                        {showPrev && (
-                          prevMap[`${w.masandaId}_${w.wing}`] === undefined
-                            ? <span style={{fontSize:10,color:'var(--text-dim)'}}>—</span>
-                            : <span style={{display:'inline-flex',alignItems:'center',gap:2}}>
-                                <span style={{fontSize:10,color:'var(--text-muted)'}}>({prevMap[`${w.masandaId}_${w.wing}`]})</span>
-                                <span style={{fontSize:10,fontWeight:700,color:(w.totalScore-prevMap[`${w.masandaId}_${w.wing}`])>0?'#057a55':(w.totalScore-prevMap[`${w.masandaId}_${w.wing}`])<0?'#c81e1e':'var(--text-muted)'}}>
-                                  {(w.totalScore-prevMap[`${w.masandaId}_${w.wing}`])>0?'+':''}{w.totalScore-prevMap[`${w.masandaId}_${w.wing}`]}
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>الجناح</th><th>المساندة</th><th>المستفيدون</th><th>المخالفات</th><th>الالتزام/15</th><th>السلوك/15</th><th>التفاعل/15</th><th>السكن/15</th><th>الإجمالي/60</th><th>المدخِل</th></tr>
+                </thead>
+                <tbody>
+                  {filteredWings.map((w,i)=>{
+                    const pct=(w.totalScore/60)*100
+                    return (<tr key={i}>
+                      <td style={{fontWeight:800}}>جناح {w.wing}</td>
+                      <td style={{fontSize:12}}>{w.masandaName}</td>
+                      <td style={{textAlign:'center',color:'#1a56db',fontWeight:700}}>{w.beneficiaries||'—'}</td>
+                      <td style={{textAlign:'center',color:'#c81e1e',fontWeight:700}}>{w.violations||0}</td>
+                      {w.axes.map((a,ai)=><td key={ai} style={{textAlign:'center',fontSize:12}}>{a.total}/15</td>)}
+                      <td>
+                        <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+                          <span style={{display:'inline-block',padding:'2px 10px',borderRadius:20,fontSize:12,fontWeight:800,background:bg(pct),color:sc(pct),border:`1px solid ${sc(pct)}`}}>{w.totalScore}/60</span>
+                          {showPrev && (
+                            prevMap[`${w.masandaId}_${w.wing}`] === undefined
+                              ? <span style={{fontSize:10,color:'var(--text-dim)'}}>—</span>
+                              : <span style={{display:'inline-flex',alignItems:'center',gap:2}}>
+                                  <span style={{fontSize:10,color:'var(--text-muted)'}}>({prevMap[`${w.masandaId}_${w.wing}`]})</span>
+                                  <span style={{fontSize:10,fontWeight:700,color:(w.totalScore-prevMap[`${w.masandaId}_${w.wing}`])>0?'#057a55':(w.totalScore-prevMap[`${w.masandaId}_${w.wing}`])<0?'#c81e1e':'var(--text-muted)'}}>
+                                    {(w.totalScore-prevMap[`${w.masandaId}_${w.wing}`])>0?'+':''}{w.totalScore-prevMap[`${w.masandaId}_${w.wing}`]}
+                                  </span>
                                 </span>
-                              </span>
-                        )}
-                      </div>
-                    </td>
-                    <td style={{fontSize:11,color:'var(--text-muted)'}}>{w.savedBy||'—'}</td>
-                  </tr>)
-                })}
-              </tbody>
-            </table></div>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{fontSize:11,color:'var(--text-muted)'}}>{w.savedBy||'—'}</td>
+                    </tr>)
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* باقي المكونات (ملخص المساندة، أفضل 3، أسوأ 3، الملاحظات) تستخدم sum المحسوب من filteredWings */}
-          {/* ... وهكذا */}
+          <div className="card" style={{ marginBottom:14 }}>
+            <div className="card-title">📊 ثانياً: ملخص بالمساندة</div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>المساندة</th><th>أجنحة</th><th>المستفيدون</th><th>المخالفات</th><th>الالتزام</th><th>السلوك</th><th>التفاعل</th><th>السكن</th><th>متوسط الدرجة</th></tr></thead>
+                <tbody>
+                  {sum.map(({m,ws,avg,ben,vio,axAvg})=>{
+                    const pct=(avg/60)*100
+                    return (<tr key={m.id}>
+                      <td style={{fontWeight:800}}>{m.name}</td>
+                      <td style={{textAlign:'center'}}>{ws.length}/{m.wings.length}</td>
+                      <td style={{textAlign:'center',color:'#1a56db'}}>{ben}</td>
+                      <td style={{textAlign:'center',color:'#c81e1e'}}>{vio}</td>
+                      {axAvg.map((v,i)=><td key={i} style={{textAlign:'center',fontSize:12}}>{v.toFixed(1)}</td>)}
+                      <td><span style={{display:'inline-block',padding:'2px 10px',borderRadius:20,fontSize:12,fontWeight:800,background:bg(pct),color:sc(pct),border:`1px solid ${sc(pct)}`}}>{avg.toFixed(1)}/60</span></td>
+                    </tr>)
+                  })}
+                  <tr style={{background:'#ebf0fd',fontWeight:800}}>
+                    <td>الإجمالي</td><td style={{textAlign:'center'}}>{filteredWings.length}</td>
+                    <td style={{textAlign:'center',color:'#1a56db'}}>{tB}</td>
+                    <td style={{textAlign:'center',color:'#c81e1e'}}>{tV}</td>
+                    <td colSpan={4}></td>
+                    <td style={{color:'#1a56db'}}>{gA.toFixed(1)}/60</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
+            <div className="card">
+              <div className="card-title" style={{color:'#057a55'}}>🏆 ثالثاً: أفضل 3 مساندات</div>
+              {best.map((x,i)=>(
+                <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                  <span style={{fontWeight:700}}>{['🥇','🥈','🥉'][i]} {x.m.name}</span>
+                  <span style={{padding:'2px 10px',borderRadius:20,fontSize:12,fontWeight:800,background:'#e3f9ee',color:'#057a55',border:'1px solid #057a55'}}>{x.avg.toFixed(1)}/60</span>
+                </div>
+              ))}
+            </div>
+            <div className="card">
+              <div className="card-title" style={{color:'#c81e1e'}}>⚠️ تحتاج متابعة</div>
+              {worst.map((x,i)=>(
+                <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                  <span style={{fontWeight:700}}>🔻{i+1} {x.m.name}</span>
+                  <span style={{padding:'2px 10px',borderRadius:20,fontSize:12,fontWeight:800,background:'#fde8e8',color:'#c81e1e',border:'1px solid #c81e1e'}}>{x.avg.toFixed(1)}/60</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card" style={{ marginBottom:14 }}>
+            <div className="card-title">📊 توزيع الدرجات</div>
+            {filteredWings.map((w,i)=>{ const pct=(w.totalScore/60)*100; const c=sc(pct); return (
+              <div key={i} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                <div style={{minWidth:80,fontSize:12,fontWeight:700,color:'var(--text-muted)'}}>جناح {w.wing}</div>
+                <div style={{flex:1,height:12,background:'var(--border)',borderRadius:6,overflow:'hidden'}}>
+                  <div style={{width:`${pct}%`,height:'100%',background:c,borderRadius:6,transition:'width .4s'}} />
+                </div>
+                <div style={{minWidth:40,fontSize:12,fontWeight:800,color:c}}>{w.totalScore}</div>
+              </div>
+            )})}
+          </div>
+
+          {['amni','fanni','baramij'].some(k => filteredWings.some(w => w.obs?.[k])) && (
+            <div className="card">
+              <div className="card-title">📝 رابعاً: الملاحظات المرصودة</div>
+              {[
+                {key:'amni',    label:'🛡️ المسار الأمني',  border:'#c81e1e', bg:'#fde8e8'},
+                {key:'fanni',   label:'🔧 المسار الفني',    border:'#b45309', bg:'#fef3c7'},
+                {key:'baramij', label:'📚 مسار البرامج',    border:'#057a55', bg:'#e3f9ee'},
+              ].map(item => {
+                const rows = filteredWings.filter(w => w.obs?.[item.key]); if (!rows.length) return null
+                return (
+                  <div key={item.key} style={{marginBottom:12}}>
+                    <div style={{fontSize:12.5,fontWeight:800,marginBottom:7,padding:'5px 10px',background:item.bg,borderRight:`4px solid ${item.border}`,borderRadius:'0 6px 6px 0'}}>{item.label}</div>
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>الجناح</th><th>المساندة</th><th>الملاحظة</th></tr></thead>
+                        <tbody>{rows.map((w,i)=><tr key={i}><td style={{fontWeight:700}}>جناح {w.wing}</td><td style={{fontSize:12}}>{w.masandaName}</td><td style={{fontSize:13}}>{w.obs[item.key]}</td></tr>)}</tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </>
       )}
     </div>
   )
 }
-
 // ─── تقارير المشرفين ──────────────────────────────────────────────────────────
 function SupervisorReport() {
   const toast = useToast()
