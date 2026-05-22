@@ -6,8 +6,7 @@ import { db } from '../../lib/firebase'
 import * as XLSX from 'xlsx'
 import {
   DEFAULT_STATUSES, DEFAULT_JOB_TYPES,
-  LEAVE_TYPES, TASK_DURATION_TYPES,
-  MISSION_TYPES, APPT_TYPES, PERMIT_TYPES,
+  LEAVE_TYPES, MISSION_TYPES, APPT_TYPES, PERMIT_TYPES,
   COLOR_MAP
 } from './attendanceConstants'
 
@@ -24,7 +23,7 @@ function datesInMonth(m) {
   const out = []
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const day = d.getDay()
-    if (day !== 5) out.push(d.toISOString().split('T')[0]) // exclude Friday
+    if (day !== 5) out.push(d.toISOString().split('T')[0])
   }
   return out
 }
@@ -62,34 +61,32 @@ function StatusBadge({ id, statuses }) {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function AttendanceReports() {
-  const [mode,      setMode]      = useState('daily')  // 'daily' | 'monthly'
+  const [mode,      setMode]      = useState('daily')
   const [date,      setDate]      = useState(today())
   const [month,     setMonth]     = useState(today().slice(0, 7))
   const [staff,     setStaff]     = useState([])
   const [statuses,  setStatuses]  = useState(DEFAULT_STATUSES)
   const [jobTypes,  setJobTypes]  = useState(DEFAULT_JOB_TYPES)
-  const [rows,      setRows]      = useState([])       // computed display rows
+  const [rows,      setRows]      = useState([])
   const [loading,   setLoading]   = useState(false)
   const [filterName,setFilterName]= useState('')
   const [filterJob, setFilterJob] = useState('')
   const [filterSt,  setFilterSt]  = useState('')
   const [monthSummary, setMonthSummary] = useState(null)
 
-  // ── Load static (staff + settings) ─────────────────────────────────────────
   const loadStatic = useCallback(async () => {
     const [sSnap, stSnap, jSnap] = await Promise.all([
       getDocs(query(collection(db, 'hrStaff'), orderBy('name'))),
       getDocs(collection(db, 'attendanceStatuses')),
       getDocs(collection(db, 'hrJobTypes')),
     ])
-    const s = sSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    const s  = sSnap.docs.map(d => ({ id: d.id, ...d.data() }))
     const st = stSnap.empty ? DEFAULT_STATUSES : stSnap.docs.map(d => ({ id: d.id, ...d.data() }))
     const j  = jSnap.empty  ? DEFAULT_JOB_TYPES : jSnap.docs.map(d => ({ id: d.id, ...d.data() }))
     setStaff(s); setStatuses(st); setJobTypes(j)
     return { staff: s, statuses: st, jobTypes: j }
   }, [])
 
-  // ── Generate daily report ───────────────────────────────────────────────────
   const runDaily = async () => {
     setLoading(true)
     const { staff: s, statuses: st, jobTypes: j } = await loadStatic()
@@ -106,7 +103,6 @@ export default function AttendanceReports() {
     setLoading(false)
   }
 
-  // ── Generate monthly report ─────────────────────────────────────────────────
   const runMonthly = async () => {
     setLoading(true)
     const { staff: s, statuses: st, jobTypes: j } = await loadStatic()
@@ -116,30 +112,26 @@ export default function AttendanceReports() {
     dates.forEach((d, i) => {
       dailyData[d] = snaps[i].exists() ? snaps[i].data() : {}
     })
-
-    // per-person aggregate
     const computed = s.map(p => {
       let present = 0, absent = 0, leave = 0, task = 0, other = 0, unset = 0
       dates.forEach(d => {
         const r = dailyData[d][p.id]
         if (!r) { unset++; return }
-        if (r.statusId === 'present')  present++
+        if (r.statusId === 'present')       present++
         else if (r.statusId === 'absent')   absent++
         else if (r.statusId === 'leave')    leave++
         else if (r.statusId === 'task')     task++
         else other++
       })
-      const total  = dates.length
-      const pct    = total ? Math.round(present / total * 100) : 0
+      const total = dates.length
+      const pct   = total ? Math.round(present / total * 100) : 0
       return {
         ...p,
         jobLabel: j.find(x => x.id === p.jobTypeId)?.label || '—',
         jobColor: j.find(x => x.id === p.jobTypeId)?.color || 'gray',
-        present, absent, leave, task, other, unset,
-        total, pct
+        present, absent, leave, task, other, unset, total, pct
       }
     })
-
     const totPresent = computed.reduce((a, r) => a + r.present, 0)
     const totDays    = computed.reduce((a, r) => a + r.total,   0)
     const avgPct     = totDays ? Math.round(totPresent / totDays * 100) : 0
@@ -148,13 +140,33 @@ export default function AttendanceReports() {
     setLoading(false)
   }
 
-  // ── Filtering ───────────────────────────────────────────────────────────────
   const filtered = rows.filter(r => {
     if (filterName && !r.name.includes(filterName)) return false
     if (filterJob  && r.jobTypeId !== filterJob)    return false
     if (filterSt   && mode === 'daily' && r.rec?.statusId !== filterSt) return false
     return true
   })
+
+  // ── حساب إحصاءات الحالات للطباعة (يومي) ────────────────────────────────────
+  const statusCounts = {}
+  if (mode === 'daily' && filtered.length) {
+    filtered.forEach(r => {
+      const sid = r.rec?.statusId || 'unset'
+      statusCounts[sid] = (statusCounts[sid] || 0) + 1
+    })
+  }
+
+  // مجموعات مرتبة حسب الحالة للطباعة
+  const printGroups = mode === 'daily' ? [
+    ...statuses.map(s => ({
+      id: s.id, label: s.label,
+      members: filtered.filter(r => r.rec?.statusId === s.id)
+    })).filter(g => g.members.length > 0),
+    ...((() => {
+      const unset = filtered.filter(r => !r.rec?.statusId)
+      return unset.length ? [{ id: 'unset', label: 'لم يُسجَّل', members: unset }] : []
+    })())
+  ] : []
 
   // ── Export Excel ────────────────────────────────────────────────────────────
   const exportExcel = () => {
@@ -173,11 +185,18 @@ export default function AttendanceReports() {
     XLSX.writeFile(wb, `حضور_${mode === 'daily' ? date : month}.xlsx`)
   }
 
-  // ── Export PDF (print) ──────────────────────────────────────────────────────
   const exportPDF = () => window.print()
 
   const jobLabel = (id) => jobTypes.find(j => j.id === id)?.label || '—'
   const jobColor = (id) => jobTypes.find(j => j.id === id)?.color || 'gray'
+
+  // ── الألوان الثابتة للطباعة (بدل CSS vars) ──────────────────────────────────
+  const PRINT_STATUS_COLORS = {
+    present: '#16a34a', absent: '#dc2626', leave: '#ea580c',
+    task: '#6b7280', mission: '#2563eb', friday: '#7c3aed',
+    death: '#374151', appt: '#0284c7', sick: '#d97706',
+    permit: '#9333ea', unset: '#9ca3af',
+  }
 
   return (
     <div>
@@ -234,12 +253,8 @@ export default function AttendanceReports() {
           </button>
           {rows.length > 0 && (
             <>
-              <button className="btn btn-ghost" onClick={exportExcel}>
-                📊 Excel
-              </button>
-              <button className="btn btn-ghost" onClick={exportPDF}>
-                🖨️ طباعة / PDF
-              </button>
+              <button className="btn btn-ghost" onClick={exportExcel}>📊 Excel</button>
+              <button className="btn btn-ghost" onClick={exportPDF}>🖨️ طباعة / PDF</button>
             </>
           )}
         </div>
@@ -261,9 +276,9 @@ export default function AttendanceReports() {
         </div>
       )}
 
-      {/* Results */}
+      {/* Results - screen view */}
       {rows.length > 0 && (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }} id="print-area">
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           {mode === 'daily' ? (
             <table className="data-table">
               <thead>
@@ -298,7 +313,7 @@ export default function AttendanceReports() {
               </thead>
               <tbody>
                 {filtered.map(r => {
-                  const jc = COLOR_MAP[jobColor(r.jobTypeId)] || COLOR_MAP.gray
+                  const jc  = COLOR_MAP[jobColor(r.jobTypeId)] || COLOR_MAP.gray
                   const clr = r.pct >= 70 ? 'var(--green)' : r.pct >= 50 ? 'var(--orange)' : 'var(--red)'
                   return (
                     <tr key={r.id}>
@@ -315,9 +330,7 @@ export default function AttendanceReports() {
                       <td style={{ color: r.absent > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{r.absent}</td>
                       <td style={{ color: 'var(--orange)' }}>{r.leave}</td>
                       <td style={{ color: 'var(--text-muted)' }}>{r.task}</td>
-                      <td>
-                        <span style={{ fontWeight: 600, color: clr }}>{r.pct}%</span>
-                      </td>
+                      <td><span style={{ fontWeight: 600, color: clr }}>{r.pct}%</span></td>
                     </tr>
                   )
                 })}
@@ -327,14 +340,176 @@ export default function AttendanceReports() {
         </div>
       )}
 
+      {/* ══ منطقة الطباعة — مخفية على الشاشة، تظهر عند الطباعة فقط ══ */}
+      {rows.length > 0 && (
+        <div id="pdf-layout" style={{ display: 'none' }}>
+
+          {/* ترويسة */}
+          <div style={{ textAlign: 'center', marginBottom: 14, borderBottom: '2px solid #333', paddingBottom: 10 }}>
+            <div style={{ fontSize: 17, fontWeight: 800 }}>
+              {mode === 'daily' ? 'كشف الحضور اليومي' : 'التقرير الشهري للحضور'}
+            </div>
+            <div style={{ fontSize: 12, color: '#555', marginTop: 3 }}>
+              {mode === 'daily' ? `التاريخ: ${date}` : `الشهر: ${month}`}
+              {filterJob ? `  |  طبيعة العمل: ${jobLabel(filterJob)}` : ''}
+              {`  |  إجمالي: ${filtered.length} فرد`}
+            </div>
+          </div>
+
+          {mode === 'daily' ? (
+            <>
+              {/* ملخص الحالات */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14, border: '1px solid #bbb' }}>
+                <tbody>
+                  <tr>
+                    {statuses.map(s => (statusCounts[s.id] || 0) > 0 && (
+                      <td key={s.id} style={{
+                        textAlign: 'center', padding: '6px 4px',
+                        border: '1px solid #bbb',
+                        borderTop: `3px solid ${PRINT_STATUS_COLORS[s.id] || '#888'}`
+                      }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: PRINT_STATUS_COLORS[s.id] || '#333' }}>
+                          {statusCounts[s.id]}
+                        </div>
+                        <div style={{ fontSize: 11 }}>{s.label}</div>
+                      </td>
+                    ))}
+                    {(statusCounts['unset'] || 0) > 0 && (
+                      <td style={{
+                        textAlign: 'center', padding: '6px 4px',
+                        border: '1px solid #bbb', borderTop: '3px solid #9ca3af'
+                      }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: '#9ca3af' }}>{statusCounts['unset']}</div>
+                        <div style={{ fontSize: 11 }}>لم يُسجَّل</div>
+                      </td>
+                    )}
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* الأسماء مقسَّمة حسب الحالة */}
+              {printGroups.map(g => (
+                <div key={g.id} style={{ marginBottom: 12, breakInside: 'avoid' }}>
+                  <div style={{
+                    fontWeight: 700, fontSize: 12,
+                    background: '#f0f0f0', padding: '4px 10px', marginBottom: 3,
+                    borderRight: `4px solid ${PRINT_STATUS_COLORS[g.id] || '#888'}`
+                  }}>
+                    {g.label} ({g.members.length})
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ background: '#f8f8f8' }}>
+                        <th style={th}>#</th>
+                        <th style={th}>الاسم</th>
+                        <th style={th}>الرتبة</th>
+                        <th style={th}>طبيعة العمل</th>
+                        <th style={th}>التفاصيل</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.members.map((r, i) => (
+                        <tr key={r.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                          <td style={td}>{i + 1}</td>
+                          <td style={{ ...td, fontWeight: 600 }}>{r.name}</td>
+                          <td style={{ ...td, color: '#666' }}>{r.rank || '—'}</td>
+                          <td style={td}>{r.jobLabel}</td>
+                          <td style={{ ...td, color: '#555' }}>{detailText(r.rec) || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </>
+          ) : (
+            <>
+              {/* ملخص شهري */}
+              {monthSummary && (
+                <div style={{ display: 'flex', border: '1px solid #bbb', marginBottom: 14 }}>
+                  {[
+                    { label: 'متوسط الحضور', val: monthSummary.avgPct + '%' },
+                    { label: 'أيام العمل',    val: monthSummary.workDays },
+                    { label: 'إجمالي الكوادر',val: monthSummary.headcount },
+                  ].map((k, i) => (
+                    <div key={i} style={{
+                      flex: 1, textAlign: 'center', padding: '8px',
+                      borderLeft: i > 0 ? '1px solid #bbb' : 'none'
+                    }}>
+                      <div style={{ fontSize: 20, fontWeight: 800 }}>{k.val}</div>
+                      <div style={{ fontSize: 11, color: '#555' }}>{k.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* جدول شهري */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead>
+                  <tr style={{ background: '#f0f0f0' }}>
+                    <th style={th}>الاسم</th>
+                    <th style={th}>طبيعة العمل</th>
+                    <th style={{ ...th, textAlign: 'center' }}>حضور</th>
+                    <th style={{ ...th, textAlign: 'center' }}>غياب</th>
+                    <th style={{ ...th, textAlign: 'center' }}>إجازة</th>
+                    <th style={{ ...th, textAlign: 'center' }}>مكلَّف</th>
+                    <th style={{ ...th, textAlign: 'center' }}>أخرى</th>
+                    <th style={{ ...th, textAlign: 'center' }}>نسبة الحضور</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((r, i) => (
+                    <tr key={r.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                      <td style={td}>
+                        <div style={{ fontWeight: 600 }}>{r.name}</div>
+                        {r.rank && <div style={{ fontSize: 10, color: '#888' }}>{r.rank}</div>}
+                      </td>
+                      <td style={td}>{r.jobLabel}</td>
+                      <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: '#16a34a' }}>{r.present}</td>
+                      <td style={{ ...td, textAlign: 'center', color: r.absent > 0 ? '#dc2626' : '#888' }}>{r.absent}</td>
+                      <td style={{ ...td, textAlign: 'center', color: '#ea580c' }}>{r.leave}</td>
+                      <td style={{ ...td, textAlign: 'center', color: '#6b7280' }}>{r.task}</td>
+                      <td style={{ ...td, textAlign: 'center', color: '#6b7280' }}>{r.other}</td>
+                      <td style={{ ...td, textAlign: 'center', fontWeight: 700,
+                        color: r.pct >= 70 ? '#16a34a' : r.pct >= 50 ? '#ea580c' : '#dc2626' }}>
+                        {r.pct}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Print CSS */}
       <style>{`
         @media print {
-          body > *:not(#print-area) { display: none !important; }
-          #print-area { display: block !important; }
-          .data-table th, .data-table td { font-size: 11px !important; }
+          body * { visibility: hidden; }
+          #pdf-layout, #pdf-layout * { visibility: visible; }
+          #pdf-layout {
+            display: block !important;
+            visibility: visible !important;
+            position: fixed;
+            top: 0; right: 0;
+            width: 100%;
+            background: white;
+            padding: 16px 20px;
+            direction: rtl;
+            font-family: Cairo, Arial, sans-serif;
+          }
         }
       `}</style>
     </div>
   )
+}
+
+// ── أنماط خلايا الجدول للطباعة ───────────────────────────────────────────────
+const th = {
+  border: '1px solid #ccc', padding: '4px 8px',
+  textAlign: 'right', fontWeight: 700, background: '#f0f0f0'
+}
+const td = {
+  border: '1px solid #ddd', padding: '4px 8px', textAlign: 'right'
 }

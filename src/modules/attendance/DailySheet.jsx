@@ -348,6 +348,31 @@ export default function DailySheet() {
 
   const hasDetail = (sid) => statuses.find(x => x.id === sid)?.hasDetail
 
+  // ── بيانات الطباعة ───────────────────────────────────────────────────────────
+  const PRINT_STATUS_COLORS = {
+    present: '#16a34a', absent: '#dc2626', leave: '#ea580c',
+    task: '#6b7280', mission: '#2563eb', friday: '#7c3aed',
+    death: '#374151', appt: '#0284c7', sick: '#d97706',
+    permit: '#9333ea', unset: '#9ca3af',
+  }
+
+  const printStatusCounts = {}
+  filtered.forEach(s => {
+    const sid = records[s.id]?.statusId || 'unset'
+    printStatusCounts[sid] = (printStatusCounts[sid] || 0) + 1
+  })
+
+  const printGroups = [
+    ...statuses.map(st => ({
+      id: st.id, label: st.label,
+      members: filtered.filter(s => records[s.id]?.statusId === st.id)
+    })).filter(g => g.members.length > 0),
+    ...((() => {
+      const unset = filtered.filter(s => !records[s.id]?.statusId)
+      return unset.length ? [{ id: 'unset', label: 'لم يُسجَّل', members: unset }] : []
+    })())
+  ]
+
   return (
     <div>
       {/* Header row */}
@@ -369,6 +394,11 @@ export default function DailySheet() {
           onClick={saveSheet} disabled={saving}>
           {saving ? '⏳ جاري الحفظ...' : '💾 حفظ الكشف'}
         </button>
+        {staff.length > 0 && (
+          <button className="btn btn-ghost" onClick={() => window.print()}>
+            🖨️ طباعة
+          </button>
+        )}
       </div>
 
       {/* KPI strip */}
@@ -477,6 +507,98 @@ export default function DailySheet() {
           </table>
         </div>
       )}
+
+      {/* ══ منطقة الطباعة ══ */}
+      <div id="pdf-layout" style={{ display: 'none' }}>
+        {/* ترويسة */}
+        <div style={{ textAlign: 'center', marginBottom: 14, borderBottom: '2px solid #333', paddingBottom: 10 }}>
+          <div style={{ fontSize: 17, fontWeight: 800 }}>كشف الحضور اليومي</div>
+          <div style={{ fontSize: 12, color: '#555', marginTop: 3 }}>
+            {`التاريخ: ${date}`}
+            {filterJob ? `  |  طبيعة العمل: ${jobLabel(filterJob)}` : ''}
+            {`  |  إجمالي: ${filtered.length} فرد`}
+          </div>
+        </div>
+
+        {/* ملخص الحالات */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14, border: '1px solid #bbb' }}>
+          <tbody>
+            <tr>
+              {statuses.map(st => (printStatusCounts[st.id] || 0) > 0 && (
+                <td key={st.id} style={{
+                  textAlign: 'center', padding: '6px 4px', border: '1px solid #bbb',
+                  borderTop: `3px solid ${PRINT_STATUS_COLORS[st.id] || '#888'}`
+                }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: PRINT_STATUS_COLORS[st.id] || '#333' }}>
+                    {printStatusCounts[st.id]}
+                  </div>
+                  <div style={{ fontSize: 11 }}>{st.label}</div>
+                </td>
+              ))}
+              {(printStatusCounts['unset'] || 0) > 0 && (
+                <td style={{ textAlign: 'center', padding: '6px 4px', border: '1px solid #bbb', borderTop: '3px solid #9ca3af' }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: '#9ca3af' }}>{printStatusCounts['unset']}</div>
+                  <div style={{ fontSize: 11 }}>لم يُسجَّل</div>
+                </td>
+              )}
+            </tr>
+          </tbody>
+        </table>
+
+        {/* الأسماء مقسَّمة حسب الحالة */}
+        {printGroups.map(g => (
+          <div key={g.id} style={{ marginBottom: 12, breakInside: 'avoid' }}>
+            <div style={{
+              fontWeight: 700, fontSize: 12, background: '#f0f0f0',
+              padding: '4px 10px', marginBottom: 3,
+              borderRight: `4px solid ${PRINT_STATUS_COLORS[g.id] || '#888'}`
+            }}>
+              {g.label} ({g.members.length})
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+              <thead>
+                <tr style={{ background: '#f8f8f8' }}>
+                  <th style={pTh}>#</th>
+                  <th style={pTh}>الاسم</th>
+                  <th style={pTh}>الرتبة</th>
+                  <th style={pTh}>طبيعة العمل</th>
+                </tr>
+              </thead>
+              <tbody>
+                {g.members.map((s, i) => (
+                  <tr key={s.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                    <td style={pTd}>{i + 1}</td>
+                    <td style={{ ...pTd, fontWeight: 600 }}>{s.name}</td>
+                    <td style={{ ...pTd, color: '#666' }}>{s.rank || '—'}</td>
+                    <td style={pTd}>{jobLabel(s.jobTypeId)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #pdf-layout, #pdf-layout * { visibility: visible; }
+          #pdf-layout {
+            display: block !important;
+            visibility: visible !important;
+            position: fixed;
+            top: 0; right: 0;
+            width: 100%;
+            background: white;
+            padding: 16px 20px;
+            direction: rtl;
+            font-family: Cairo, Arial, sans-serif;
+          }
+        }
+      `}</style>
     </div>
   )
 }
+
+const pTh = { border: '1px solid #ccc', padding: '4px 8px', textAlign: 'right', fontWeight: 700 }
+const pTd = { border: '1px solid #ddd', padding: '4px 8px', textAlign: 'right' }
