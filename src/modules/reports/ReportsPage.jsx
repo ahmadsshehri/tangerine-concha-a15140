@@ -40,8 +40,7 @@ function printTable(title, headers, rows) {
   </style></head><body>
   <h2>${title}</h2>
   <table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>
-  <div class="ft">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>
-  </body></html>`
+  <div class="ft">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>`
   const w = window.open('', '_blank')
   w.document.write(html); w.document.close()
   setTimeout(() => w.print(), 400)
