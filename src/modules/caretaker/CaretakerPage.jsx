@@ -457,12 +457,23 @@ function SavedView({ records, loading, selectedWeek, setSelectedWeek, onView, on
   const allWeeks = yearsInData.flatMap(y => weeksOfYear(y))
     .sort((a, b) => b.from > a.from ? 1 : -1)
 
-  // build a set of weeks that have at least one record
-  const weeksWithData = new Set(records.map(r => r.from).filter(Boolean))
+  // check if a record belongs to a given week (Sunday of that week)
+  const recordBelongsToWeek = (r, weekSunday) => {
+    if (!r.from) return false
+    const sun = new Date(weekSunday + 'T12:00:00')
+    const thu = new Date(sun); thu.setDate(sun.getDate() + 6)
+    const from = new Date(r.from + 'T12:00:00')
+    return from >= sun && from <= thu
+  }
+
+  // build a set of week-Sundays that have at least one record
+  const weeksWithData = new Set(
+    records.flatMap(r => allWeeks.filter(w => recordBelongsToWeek(r, w.from)).map(w => w.from))
+  )
 
   const weekRecords = selectedWeek === 'all'
     ? records
-    : records.filter(r => r.from === selectedWeek)
+    : records.filter(r => recordBelongsToWeek(r, selectedWeek))
   const weekMap = {}
   weekRecords.forEach(r => { weekMap[r.center] = r })
 
