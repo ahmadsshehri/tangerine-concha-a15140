@@ -13,6 +13,36 @@ function weekNum(d) {
   return Math.ceil((((d - j) / 86400000) + j.getDay() + 1) / 7)
 }
 
+// returns the Sunday of the week containing `d`
+function weekStart(d) {
+  const day = new Date(d)
+  day.setHours(12, 0, 0, 0)
+  day.setDate(day.getDate() - day.getDay())
+  return day
+}
+
+function toISO(d) { return d.toISOString().split('T')[0] }
+
+// build list of all week-starts for a given year
+function weeksOfYear(year) {
+  const weeks = []
+  const d = new Date(year, 0, 1)
+  d.setDate(d.getDate() - d.getDay()) // go back to Sunday
+  while (d.getFullYear() <= year || weeks.length === 0) {
+    const from = new Date(d)
+    const to = new Date(d); to.setDate(d.getDate() + 4)
+    const wn = weekNum(new Date(d.getFullYear(), 0, 1) < from ? from : new Date(year, 0, 1))
+    weeks.push({ from: toISO(from), to: toISO(to), label: `الأسبوع ${weekNum(from)} — ${from.getDate()}/${from.getMonth()+1} إلى ${to.getDate()}/${to.getMonth()+1}` })
+    d.setDate(d.getDate() + 7)
+    if (from.getFullYear() > year) break
+  }
+  return weeks.filter(w => {
+    const fy = new Date(w.from).getFullYear()
+    const ty = new Date(w.to).getFullYear()
+    return fy === year || ty === year
+  })
+}
+
 const initScores = () => QDAYS.map(() => QA.map(ax => ax.items.map(() => 0)))
 const initPrograms = () => QPROG.map(name => ({ name, days: QDAYS.map(() => ({ n: 0, h: 0 })) }))
 const initDayMeta = () => QDAYS.map(() => ({ vio: '', ben: '' }))
@@ -26,6 +56,9 @@ export default function CaretakerPage() {
   const [saving,   setSaving]   = useState(false)
   const [editId,   setEditId]   = useState(null)
   const [tab,      setTab]      = useState('entry')
+
+  const [selectedWeek, setSelectedWeek] = useState(() => toISO(weekStart(new Date())))
+  const [viewRecord, setViewRecord] = useState(null)
 
   const [selM,  setSelM]  = useState(null)
   const [selW,  setSelW]  = useState(null)
@@ -382,46 +415,245 @@ export default function CaretakerPage() {
         </div>
       )}
 
-      {tab === 'saved' && (
+      {tab === 'saved' && !viewRecord && (
+        <SavedView
+          records={records}
+          loading={loading}
+          selectedWeek={selectedWeek}
+          setSelectedWeek={setSelectedWeek}
+          onView={setViewRecord}
+          onEdit={r => { loadForEdit(r) }}
+          onDelete={delRecord}
+          isAdmin={isAdmin}
+          hasPerm={hasPerm}
+        />
+      )}
+
+      {tab === 'saved' && viewRecord && (
+        <RecordView
+          record={viewRecord}
+          onBack={() => setViewRecord(null)}
+          onEdit={r => { loadForEdit(r); setViewRecord(null) }}
+          onDelete={async r => { await delRecord(r.id); setViewRecord(null) }}
+          isAdmin={isAdmin}
+          hasPerm={hasPerm}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Saved Evaluations View ──────────────────────────────────────────────────
+
+function SavedView({ records, loading, selectedWeek, setSelectedWeek, onView, onEdit, onDelete, isAdmin, hasPerm }) {
+  const currentYear = new Date().getFullYear()
+  const allWeeks = weeksOfYear(currentYear)
+
+  const weekRecords = records.filter(r => r.from === selectedWeek)
+  const weekMap = {}
+  weekRecords.forEach(r => { weekMap[r.center] = r })
+
+  const currentWeekISO = toISO(weekStart(new Date()))
+  const selWeekObj = allWeeks.find(w => w.from === selectedWeek)
+
+  return (
+    <div>
+      {/* Week selector */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">📅 اختر الأسبوع</div>
+        <select
+          value={selectedWeek}
+          onChange={e => setSelectedWeek(e.target.value)}
+          style={{
+            width: '100%', padding: '10px 14px', borderRadius: 8,
+            border: '1.5px solid var(--border)', background: 'var(--surface2)',
+            color: 'var(--text)', fontFamily: 'Cairo', fontSize: 14, cursor: 'pointer'
+          }}
+        >
+          {allWeeks.map(w => (
+            <option key={w.from} value={w.from}>
+              {w.label}{w.from === currentWeekISO ? ' (الأسبوع الحالي)' : ''}
+            </option>
+          ))}
+        </select>
+        {selWeekObj && (
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+            من: {selectedWeek} — إلى: {selWeekObj.to}
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ height: 120 }} className="skeleton" />
+      ) : (
         <div>
-          {loading ? (
-            <div style={{ height: 120 }} className="skeleton" />
-          ) : records.length === 0 ? (
-            <div className="empty-state">
-              <div className="es-icon">📭</div>
-              <div className="es-title">لا توجد تقييمات محفوظة</div>
-              <div className="es-sub">ابدأ بإدخال أول تقييم أسبوعي</div>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 12 }}>
-              {[...records].sort((a,b) => (b.from||'') > (a.from||'') ? 1 : -1).map(r => {
-                const ms = MASANDAT.find(m => r.center?.startsWith(m.id))
-                const wRaw = r.center?.replace((ms?.id||'') + '_', '').replace(/_/g, ' ') || r.center
-                const wL = isNaN(wRaw) ? wRaw : `جناح ${wRaw}`
-                return (
-                  <div key={r.id} className="card" style={{ borderRight: '3px solid var(--accent)' }}>
-                    <div style={{ fontWeight: 800, marginBottom: 6 }}>
-                      📋 {ms?.name || '—'} — {wL}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
-                      الأسبوع: {r.from || '—'} ← {r.to || '—'}
-                    </div>
-                    {r.savedBy && (
-                      <div style={{ fontSize: 11, color: 'var(--blue)', marginBottom: 8 }}>
-                        💾 {r.savedBy}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn-blue btn-sm" onClick={() => loadForEdit(r)}>✏️ تعديل</button>
-                      {(isAdmin || hasPerm('caretaker_delete')) && (
-                        <button className="btn btn-danger btn-sm" onClick={() => delRecord(r.id)}>🗑️ حذف</button>
-                      )}
-                    </div>
+          {MASANDAT.map((ms, mi) => {
+            const registered = ms.wings.filter(w => {
+              const cid = `${ms.id}_${String(w).replace(/\s/g, '_')}`
+              return !!weekMap[cid]
+            }).length
+            return (
+              <div key={mi} className="card" style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ fontWeight: 800, fontSize: 15 }}>🏢 {ms.name}</div>
+                  <div style={{ fontSize: 12, color: registered === ms.wings.length ? 'var(--green)' : 'var(--text-muted)' }}>
+                    {registered} / {ms.wings.length} مسجّل
                   </div>
-                )
-              })}
-            </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 8 }}>
+                  {ms.wings.map(w => {
+                    const cid = `${ms.id}_${String(w).replace(/\s/g, '_')}`
+                    const rec = weekMap[cid]
+                    const wLabel = isNaN(w) ? w : `جناح ${w}`
+                    if (rec) {
+                      const dayScores = rec.days?.map(d =>
+                        d.axes?.reduce((sum, ax) => sum + (ax.scores?.reduce((a,b) => a+b, 0) || 0), 0) || 0
+                      ) || []
+                      const total = dayScores.reduce((a,b) => a+b, 0)
+                      const maxScore = (rec.days?.length || 5) * 60
+                      return (
+                        <div key={w} style={{
+                          padding: '10px 12px', borderRadius: 8,
+                          border: '1.5px solid var(--green)',
+                          background: 'rgba(63,185,80,.07)',
+                          display: 'flex', flexDirection: 'column', gap: 6
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ fontWeight: 700, fontSize: 13 }}>✅ {wLabel}</div>
+                            <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>
+                              {total}/{maxScore}
+                            </div>
+                          </div>
+                          {rec.savedBy && (
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>💾 {rec.savedBy}</div>
+                          )}
+                          <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+                            <button className="btn btn-blue btn-sm" style={{ flex: 1, fontSize: 11 }} onClick={() => onView(rec)}>
+                              👁 عرض
+                            </button>
+                            <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 11 }} onClick={() => onEdit(rec)}>
+                              ✏️ تعديل
+                            </button>
+                            {(isAdmin || hasPerm('caretaker_delete')) && (
+                              <button className="btn btn-danger btn-sm" style={{ fontSize: 11 }} onClick={() => onDelete(rec.id)}>
+                                🗑
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    } else {
+                      return (
+                        <div key={w} style={{
+                          padding: '10px 12px', borderRadius: 8,
+                          border: '1.5px dashed var(--border)',
+                          background: 'var(--surface2)',
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          color: 'var(--text-muted)'
+                        }}>
+                          <span style={{ fontSize: 16 }}>⬜</span>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>{wLabel}</div>
+                            <div style={{ fontSize: 10, marginTop: 2 }}>لم يتم التسجيل</div>
+                          </div>
+                        </div>
+                      )
+                    }
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Record Detail View ──────────────────────────────────────────────────────
+
+function RecordView({ record: r, onBack, onEdit, onDelete, isAdmin, hasPerm }) {
+  const ms = MASANDAT.find(m => r.center?.startsWith(m.id))
+  const wRaw = r.center?.replace((ms?.id || '') + '_', '').replace(/_/g, ' ') || r.center
+  const wLabel = isNaN(wRaw) ? wRaw : `جناح ${wRaw}`
+  const [activeDay, setActiveDay] = useState(0)
+
+  return (
+    <div className="animate-in">
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+        <button className="btn btn-ghost btn-sm" onClick={onBack}>← رجوع</button>
+        <div style={{ fontWeight: 800, fontSize: 15 }}>
+          📋 {ms?.name || '—'} — {wLabel}
+        </div>
+        <div style={{ marginRight: 'auto', display: 'flex', gap: 6 }}>
+          <button className="btn btn-blue btn-sm" onClick={() => onEdit(r)}>✏️ تعديل</button>
+          {(isAdmin || hasPerm('caretaker_delete')) && (
+            <button className="btn btn-danger btn-sm" onClick={() => onDelete(r)}>🗑️ حذف</button>
           )}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="form-row fr-3">
+          <div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>الأسبوع</div><div style={{ fontWeight: 700 }}>{r.from} ← {r.to}</div></div>
+          <div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>إجمالي المستفيدين</div><div style={{ fontWeight: 700 }}>{r.ben || 0}</div></div>
+          <div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>الحوادث</div><div style={{ fontWeight: 700 }}>{r.incidents || 0}</div></div>
+        </div>
+        {r.notes && <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>📝 {r.notes}</div>}
+        {r.savedBy && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--blue)' }}>💾 {r.savedBy}</div>}
+      </div>
+
+      <div className="day-tabs" style={{ marginBottom: 14 }}>
+        {(r.days || []).map((day, di) => {
+          const dayTotal = day.axes?.reduce((s, ax) => s + (ax.scores?.reduce((a,b)=>a+b,0)||0), 0) || 0
+          return (
+            <button key={di}
+              className={`day-tab ${activeDay === di ? 'active' : ''} ${dayTotal > 0 ? 'done' : ''}`}
+              onClick={() => setActiveDay(di)}
+            >
+              {day.day}
+            </button>
+          )
+        })}
+      </div>
+
+      {r.days?.[activeDay] && (
+        <div className="animate-in">
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            <div className="card" style={{ flex: 1, padding: '10px 14px' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>مخالفات اليوم</div>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>{r.days[activeDay].violations || 0}</div>
+            </div>
+            <div className="card" style={{ flex: 1, padding: '10px 14px' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>مستفيدو اليوم</div>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>{r.days[activeDay].beneficiaries || 0}</div>
+            </div>
+            <div className="card" style={{ flex: 1, padding: '10px 14px' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>مجموع اليوم</div>
+              <div style={{ fontWeight: 800, fontSize: 18, color: 'var(--green)' }}>
+                {r.days[activeDay].axes?.reduce((s,ax)=>s+(ax.scores?.reduce((a,b)=>a+b,0)||0),0)||0}/60
+              </div>
+            </div>
+          </div>
+
+          {r.days[activeDay].axes?.map((ax, ai) => (
+            <div key={ai} className="axis-card" style={{ '--axis-color': QA[ai]?.color || 'var(--accent)', marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div className="axis-label">{ax.label}</div>
+                <div className="axis-total">{ax.scores?.reduce((a,b)=>a+b,0)||0} / {(ax.scores?.length||0)*5}</div>
+              </div>
+              {ax.scores?.map((score, ii) => (
+                <div key={ii} className="axis-item">
+                  <div className="axis-item-label">{QA[ai]?.items[ii]?.label || `البند ${ii+1}`}</div>
+                  <div className="score-btns">
+                    {[1,2,3,4,5].map(n => (
+                      <button key={n} className={`sb ${score === n ? 'sel' : ''}`} disabled type="button">{n}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       )}
     </div>
