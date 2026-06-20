@@ -446,14 +446,26 @@ export default function CaretakerPage() {
 // ─── Saved Evaluations View ──────────────────────────────────────────────────
 
 function SavedView({ records, loading, selectedWeek, setSelectedWeek, onView, onEdit, onDelete, isAdmin, hasPerm }) {
-  const currentYear = new Date().getFullYear()
-  const allWeeks = weeksOfYear(currentYear)
+  const currentWeekISO = toISO(weekStart(new Date()))
 
-  const weekRecords = records.filter(r => r.from === selectedWeek)
+  // collect all years present in records + current year
+  const yearsInData = [...new Set(records.map(r => r.from ? new Date(r.from).getFullYear() : null).filter(Boolean))]
+  const currentYear = new Date().getFullYear()
+  if (!yearsInData.includes(currentYear)) yearsInData.push(currentYear)
+  yearsInData.sort((a, b) => b - a)
+
+  const allWeeks = yearsInData.flatMap(y => weeksOfYear(y))
+    .sort((a, b) => b.from > a.from ? 1 : -1)
+
+  // build a set of weeks that have at least one record
+  const weeksWithData = new Set(records.map(r => r.from).filter(Boolean))
+
+  const weekRecords = selectedWeek === 'all'
+    ? records
+    : records.filter(r => r.from === selectedWeek)
   const weekMap = {}
   weekRecords.forEach(r => { weekMap[r.center] = r })
 
-  const currentWeekISO = toISO(weekStart(new Date()))
   const selWeekObj = allWeeks.find(w => w.from === selectedWeek)
 
   return (
@@ -470,9 +482,10 @@ function SavedView({ records, loading, selectedWeek, setSelectedWeek, onView, on
             color: 'var(--text)', fontFamily: 'Cairo', fontSize: 14, cursor: 'pointer'
           }}
         >
+          <option value="all">📋 عرض الكل ({records.length} تقييم)</option>
           {allWeeks.map(w => (
             <option key={w.from} value={w.from}>
-              {w.label}{w.from === currentWeekISO ? ' (الأسبوع الحالي)' : ''}
+              {weeksWithData.has(w.from) ? '✅ ' : ''}{w.label}{w.from === currentWeekISO ? ' (الأسبوع الحالي)' : ''}
             </option>
           ))}
         </select>
@@ -485,6 +498,44 @@ function SavedView({ records, loading, selectedWeek, setSelectedWeek, onView, on
 
       {loading ? (
         <div style={{ height: 120 }} className="skeleton" />
+      ) : selectedWeek === 'all' ? (
+        /* ── وضع عرض الكل ── */
+        records.length === 0 ? (
+          <div className="empty-state">
+            <div className="es-icon">📭</div>
+            <div className="es-title">لا توجد تقييمات محفوظة</div>
+            <div className="es-sub">ابدأ بإدخال أول تقييم أسبوعي</div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 10 }}>
+            {[...records].sort((a,b) => (b.from||'') > (a.from||'') ? 1 : -1).map(r => {
+              const ms = MASANDAT.find(m => r.center?.startsWith(m.id))
+              const wRaw = r.center?.replace((ms?.id||'') + '_', '').replace(/_/g,' ') || r.center
+              const wL = isNaN(wRaw) ? wRaw : `جناح ${wRaw}`
+              const total = r.days?.reduce((s,d) => s + (d.axes?.reduce((ss,ax) => ss + (ax.scores?.reduce((a,b)=>a+b,0)||0), 0)||0), 0) || 0
+              const maxScore = (r.days?.length || 5) * 60
+              return (
+                <div key={r.id} className="card" style={{ borderRight: '3px solid var(--green)' }}>
+                  <div style={{ fontWeight: 800, marginBottom: 4 }}>✅ {ms?.name || '—'} — {wL}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+                    📅 {r.from} ← {r.to}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 700, marginBottom: 8 }}>
+                    {total} / {maxScore}
+                  </div>
+                  {r.savedBy && <div style={{ fontSize: 11, color: 'var(--blue)', marginBottom: 8 }}>💾 {r.savedBy}</div>}
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn btn-blue btn-sm" style={{ flex: 1 }} onClick={() => onView(r)}>👁 عرض</button>
+                    <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => onEdit(r)}>✏️ تعديل</button>
+                    {(isAdmin || hasPerm('caretaker_delete')) && (
+                      <button className="btn btn-danger btn-sm" onClick={() => onDelete(r.id)}>🗑</button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
       ) : (
         <div>
           {MASANDAT.map((ms, mi) => {
@@ -571,6 +622,7 @@ function SavedView({ records, loading, selectedWeek, setSelectedWeek, onView, on
 }
 
 // ─── Record Detail View ──────────────────────────────────────────────────────
+
 
 function RecordView({ record: r, onBack, onEdit, onDelete, isAdmin, hasPerm }) {
   const ms = MASANDAT.find(m => r.center?.startsWith(m.id))
