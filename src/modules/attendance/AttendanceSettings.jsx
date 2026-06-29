@@ -121,7 +121,10 @@ function ItemEditor({ title, collection: colName, defaults }) {
         <div className="modal-overlay" onClick={close}>
           <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{form.id ? 'تعديل' : 'إضافة جديد'} — {title}</h3>
+              <h3 className="modal-title">
+                <span className="modal-icon">{form.id ? '✏️' : '➕'}</span>
+                {form.id ? 'تعديل' : 'إضافة جديد'} — {title}
+              </h3>
               <button className="modal-close" onClick={close}>✕</button>
             </div>
             <div className="modal-body">

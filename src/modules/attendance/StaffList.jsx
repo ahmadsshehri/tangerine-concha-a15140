@@ -153,7 +153,10 @@ export default function StaffList() {
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{form.id ? '✏️ تعديل كادر' : '➕ إضافة كادر جديد'}</h3>
+              <h3 className="modal-title">
+                <span className="modal-icon">{form.id ? '✏️' : '➕'}</span>
+                {form.id ? 'تعديل كادر' : 'إضافة كادر جديد'}
+              </h3>
               <button className="modal-close" onClick={closeModal}>✕</button>
             </div>
             <div className="modal-body">
