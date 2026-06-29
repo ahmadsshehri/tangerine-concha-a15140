@@ -585,7 +585,10 @@ function StaffRecordModal({ staff, statuses, jobTypes, onClose }) {
       <div className="modal" style={{ maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}
            onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>📋 سجل الحضور — {staff.name}</h3>
+          <h3 className="modal-title">
+            <span className="modal-icon">📋</span>
+            سجل الحضور — {staff.name}
+          </h3>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
