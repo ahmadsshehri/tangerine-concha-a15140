@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   collection, getDocs, getDoc, doc, query, orderBy
 } from 'firebase/firestore'
@@ -571,6 +572,13 @@ function StaffRecordModal({ staff, statuses, jobTypes, onClose }) {
 
   useEffect(() => { if (periodMode !== 'custom') load() }, [periodMode])
 
+  // حفظ موضع الـ scroll عند الفتح واستعادته عند الإغلاق
+  const savedScroll = useRef(window.scrollY)
+  useEffect(() => {
+    savedScroll.current = window.scrollY
+    return () => { window.scrollTo({ top: savedScroll.current, behavior: 'instant' }) }
+  }, [])
+
   const present = records.filter(r => r.rec?.statusId === 'present').length
   const absent  = records.filter(r => r.rec?.statusId === 'absent').length
   const leave   = records.filter(r => r.rec?.statusId === 'leave').length
@@ -580,7 +588,7 @@ function StaffRecordModal({ staff, statuses, jobTypes, onClose }) {
   const jt = jobTypes.find(j => j.id === staff.jobTypeId)
   const jc = COLOR_MAP[jt?.color] || COLOR_MAP.gray
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}
            onClick={e => e.stopPropagation()}>
@@ -698,6 +706,7 @@ function StaffRecordModal({ staff, statuses, jobTypes, onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
