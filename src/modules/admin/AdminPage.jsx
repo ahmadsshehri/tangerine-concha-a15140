@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { auth, db } from '../../lib/firebase'
@@ -104,6 +105,12 @@ export default function AdminPage() {
   const [loading,   setLoading]   = useState(false)
   const [addModal,  setAddModal]  = useState(false)
   const [permModal, setPermModal] = useState(null)
+  const addModalScroll  = useRef(0)
+  const permModalScroll = useRef(0)
+  const openAddModal  = () => { addModalScroll.current  = window.scrollY; setAddModal(true) }
+  const closeAddModal = () => { setAddModal(false);  requestAnimationFrame(() => window.scrollTo({ top: addModalScroll.current,  behavior: 'instant' })) }
+  const openPermModal  = (u) => { permModalScroll.current = window.scrollY; setPermModal(u) }
+  const closePermModal = ()  => { setPermModal(null); requestAnimationFrame(() => window.scrollTo({ top: permModalScroll.current, behavior: 'instant' })) }
   const [form,      setForm]      = useState({ name: '', email: '', password: '', role: 'supervisor' })
   const [saving,    setSaving]    = useState(false)
 
@@ -155,7 +162,7 @@ export default function AdminPage() {
       }
       await setDoc(doc(db, 'users', cred.user.uid), userData)
       toast(form.role === 'admin' ? '✅ تم إضافة المدير' : '✅ تم إضافة المشرف')
-      setAddModal(false)
+      closeAddModal()
       setForm({ name: '', email: '', password: '', role: 'supervisor' })
       fetchUsers()
     } catch (e) {
@@ -219,7 +226,7 @@ export default function AdminPage() {
           <div className="icon" style={{ background: 'rgba(227,179,65,.15)' }}>⚙️</div>
           {isAdmin ? 'إدارة المستخدمين والصلاحيات' : 'إضافة حسابات مشرفين'}
         </div>
-        <button className="btn btn-primary" onClick={() => setAddModal(true)}>
+        <button className="btn btn-primary" onClick={openAddModal}>
           + {isAdmin ? 'مستخدم جديد' : 'مشرف جديد'}
         </button>
       </div>
@@ -331,7 +338,7 @@ export default function AdminPage() {
                           <button className="btn btn-outline btn-xs" onClick={() => promoteToAdmin(user)} style={{ fontSize: 11 }}>
                             ↑ ترقية لمدير
                           </button>
-                          <button className="btn btn-blue btn-sm" onClick={() => setPermModal(user)}>
+                          <button className="btn btn-blue btn-sm" onClick={() => openPermModal(user)}>
                             🔑 الصلاحيات
                           </button>
                         </>
@@ -364,12 +371,12 @@ export default function AdminPage() {
       </div>
 
       {/* ─ نافذة إضافة مستخدم */}
-      {addModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setAddModal(false)}>
+      {addModal && createPortal(
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeAddModal()}>
           <div className="modal">
             <div className="modal-header">
               <div className="modal-title">➕ إضافة {form.role === 'admin' ? 'مدير' : 'مشرف'} جديد</div>
-              <button className="modal-close" onClick={() => setAddModal(false)}>✕</button>
+              <button className="modal-close" onClick={closeAddModal}>✕</button>
             </div>
             <div className="modal-body">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -430,21 +437,22 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setAddModal(false)}>إلغاء</button>
+              <button className="btn btn-ghost" onClick={closeAddModal}>إلغاء</button>
               <button className="btn btn-primary" onClick={addUser} disabled={saving}>
                 {saving ? '⏳...' : '✅ إنشاء الحساب'}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ─ نافذة تعديل الصلاحيات (للمدير فقط) */}
       {permModal && isAdmin && (
         <PermissionsModal
           user={permModal}
-          onClose={() => setPermModal(null)}
-          onSaved={() => { fetchUsers(); setPermModal(null) }}
+          onClose={closePermModal}
+          onSaved={() => { fetchUsers(); closePermModal() }}
         />
       )}
     </div>
@@ -484,7 +492,7 @@ function PermissionsModal({ user, onClose, onSaved }) {
   const enabledCount = Object.values(perms).filter(Boolean).length
   const totalCount   = ALL_PERMISSIONS.flatMap(g => g.perms).length
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal modal-lg" style={{ maxWidth: 680 }}>
         <div className="modal-header">
@@ -593,6 +601,7 @@ function PermissionsModal({ user, onClose, onSaved }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
