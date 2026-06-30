@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { collection, getDocs, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore'
+import * as XLSX from 'xlsx'
 import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
@@ -1000,28 +1001,64 @@ export default function HousingReportPage() {
   )
 }
 
-// ─── التقرير اليومي ────────────────────────────────────────────────────────────
+// ─── التقرير اليومي / الشهري / فترة ──────────────────────────────────────────────
+const THIS_MONTH = () => TODAY().slice(0, 7)
+
 function DailyReportTab() {
   const toast = useToast()
+  const [mode,    setMode]    = useState('daily') // 'daily' | 'monthly' | 'range'
   const [date,    setDate]    = useState(TODAY())
+  const [month,   setMonth]   = useState(THIS_MONTH())
+  const [from,    setFrom]    = useState('')
+  const [to,      setTo]      = useState('')
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(false)
 
+  // ─── حدود الفترة الفعلية حسب الوضع ──────────────────────────────────────────
+  const periodBounds = () => {
+    if (mode === 'daily')   return { from: date, to: date }
+    if (mode === 'monthly') return { from: `${month}-01`, to: `${month}-31` }
+    return { from, to }
+  }
+
+  // وصف الفترة للعناوين والملفات
+  const periodLabel = () => {
+    if (mode === 'daily')   return date
+    if (mode === 'monthly') return month
+    return from && to ? `${from} ← ${to}` : '—'
+  }
+  const periodFileTag = () => {
+    if (mode === 'daily')   return date
+    if (mode === 'monthly') return month
+    return `${from}_${to}`
+  }
+
   const load = async () => {
-    if (!date) return
+    if (mode === 'daily'   && !date)        return
+    if (mode === 'monthly' && !month)       { toast('⚠️ حدد الشهر', 'warn'); return }
+    if (mode === 'range'   && (!from || !to)) { toast('⚠️ حدد بداية ونهاية الفترة', 'warn'); return }
+    const { from: lo, to: hi } = periodBounds()
     setLoading(true)
     try {
       const snap = await getDocs(collection(db, 'housingReports'))
       const recs = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .filter(r => r.date === date)
-        .sort((a, b) => (a.savedBy || '').localeCompare(b.savedBy || ''))
+        .filter(r => r.date && r.date >= lo && r.date <= hi)
+        .sort((a, b) =>
+          (a.date || '') === (b.date || '')
+            ? (a.savedBy || '').localeCompare(b.savedBy || '')
+            : (a.date || '').localeCompare(b.date || ''))
       setRecords(recs)
     } catch (e) { toast('❌ ' + e.message, 'error') }
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [date])
+  // تحميل تلقائي في الوضع اليومي فقط (الشهري/الفترة بزر "عرض")
+  useEffect(() => {
+    if (mode === 'daily') load()
+    else setRecords([])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, date])
 
   // ─── مساعدات ──────────────────────────────────────────────────────────────
   const wingLabel = (val) => {
@@ -1088,11 +1125,15 @@ tbody td{padding:7px 6px;border:1px solid #d1e7dd;vertical-align:top;line-height
 `
 
   const doPrint = () => {
-    if (!records.length) { toast('⚠️ لا توجد بيانات لهذا التاريخ', 'warn'); return }
+    if (!records.length) { toast('⚠️ لا توجد بيانات في هذه الفترة', 'warn'); return }
 
-    const d = new Date(date + 'T12:00:00')
+    const isMulti = mode !== 'daily'
     const days = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']
-    const dayName = days[d.getDay()]
+    const dayName = mode === 'daily' ? days[new Date(date + 'T12:00:00').getDay()] : ''
+    const reportTitle = mode === 'daily' ? 'التقرير اليومي'
+                      : mode === 'monthly' ? 'التقرير الشهري'
+                      : 'تقرير الفترة'
+    const periodTxt = mode === 'daily' ? `${dayName} | ${date}` : periodLabel()
 
     const totalActs   = records.reduce((s, r) => s + (r.activities?.length  || 0), 0)
     const totalOther  = records.reduce((s, r) => s + (r.otherCenters?.length || 0), 0)
@@ -1138,6 +1179,7 @@ tbody td{padding:7px 6px;border:1px solid #d1e7dd;vertical-align:top;line-height
       return `
         <tr>
           <td class="td-center" style="font-weight:800;color:#0a4d3a">${i + 1}</td>
+          ${isMulti ? `<td class="td-center" style="font-size:9px;white-space:nowrap">${r.date || '—'}</td>` : ''}
           <td style="font-weight:700">${r.savedBy || '—'}</td>
           <td>${wingLabel(r.wing)}</td>
           <td>${othersHtml}</td>
@@ -1157,18 +1199,18 @@ tbody td{padding:7px 6px;border:1px solid #d1e7dd;vertical-align:top;line-height
 <body>
 <div class="header">
   <div>
-    <div class="header-title">📋 التقرير اليومي — مشرفو السكن</div>
+    <div class="header-title">📋 ${reportTitle} — مشرفو السكن</div>
     <div class="header-sub">المراكز التأهيلية التخصصية</div>
   </div>
   <div class="header-right">
-    <div>📅 ${dayName} | ${date}</div>
-    <div>عدد المشرفين: ${records.length}</div>
+    <div>📅 ${periodTxt}</div>
+    <div>عدد التقارير: ${records.length}</div>
     <div>تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>
   </div>
 </div>
 
 <div class="stats">
-  <div class="stat"><div class="stat-val">${records.length}</div><div class="stat-lbl">مشرف نشط</div></div>
+  <div class="stat"><div class="stat-val">${records.length}</div><div class="stat-lbl">${isMulti ? 'إجمالي التقارير' : 'مشرف نشط'}</div></div>
   <div class="stat"><div class="stat-val">${totalOther}</div><div class="stat-lbl">تعقيبات على مراكز أخرى</div></div>
   <div class="stat"><div class="stat-val">${totalActs}</div><div class="stat-lbl">أنشطة أُشرف عليها</div></div>
   <div class="stat"><div class="stat-val">${avgScoreVal}${avgScoreVal !== '—' ? '%' : ''}</div><div class="stat-lbl">متوسط النسبة التقديرية</div></div>
@@ -1180,6 +1222,7 @@ tbody td{padding:7px 6px;border:1px solid #d1e7dd;vertical-align:top;line-height
   <thead>
     <tr>
       <th style="width:30px">#</th>
+      ${isMulti ? '<th style="width:70px">التاريخ</th>' : ''}
       <th style="width:90px">اسم المشرف</th>
       <th style="width:110px">الجناح الأساسي</th>
       <th style="width:110px">الأجنحة الأخرى</th>
@@ -1195,7 +1238,7 @@ tbody td{padding:7px 6px;border:1px solid #d1e7dd;vertical-align:top;line-height
 
 <div class="footer">
   <span>المراكز التأهيلية التخصصية — تقرير مشرفي السكن</span>
-  <span>${date} | ${new Date().toLocaleTimeString('ar-SA')}</span>
+  <span>${periodLabel()} | ${new Date().toLocaleTimeString('ar-SA')}</span>
 </div>
 
 <script>window.onload = () => setTimeout(() => window.print(), 500);<\/script>
@@ -1206,16 +1249,110 @@ tbody td{padding:7px 6px;border:1px solid #d1e7dd;vertical-align:top;line-height
     w.document.close()
   }
 
+  // ─── تصدير Excel ───────────────────────────────────────────────────────────
+  const exportExcel = () => {
+    if (!records.length) { toast('⚠️ لا توجد بيانات في هذه الفترة', 'warn'); return }
+
+    const obsText = (r) => [
+      r.obs?.amni    && 'أمني: ' + r.obs.amni,
+      r.obs?.fanni   && 'فني: ' + r.obs.fanni,
+      r.obs?.baramij && 'برامج: ' + r.obs.baramij,
+    ].filter(Boolean).join(' | ')
+
+    const actsText = (r) => (r.activities || [])
+      .map(a => `${a.name || 'نشاط'}${a.type ? ' (' + a.type + ')' : ''}${a.beneficiaries ? ' — ' + a.beneficiaries + ' مستفيد' : ''}`)
+      .join(' | ')
+
+    const headers = [
+      '#', 'التاريخ', 'المشرف', 'الجناح الأساسي', 'الأجنحة الأخرى',
+      'عدد المستفيدين', 'عدد المخالفات', 'النسبة التقديرية', 'إنجاز المهام',
+      'عدد الأنشطة', 'الأنشطة', 'الملاحظات', 'فكرة اليوم',
+    ]
+
+    const data = records.map((r, i) => [
+      i + 1,
+      r.date || '',
+      r.savedBy || '',
+      wingLabel(r.wing),
+      (r.otherCenters || []).map(c => wingLabel(c.wing)).join(' | ') || '—',
+      r.beneficiaries || 0,
+      r.violations || 0,
+      r.generalScore ? `${r.generalScore}%` : '—',
+      taskPct(r.tasks),
+      (r.activities || []).length,
+      actsText(r) || '—',
+      obsText(r) || '—',
+      r.dayIdea || '',
+    ])
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
+    ws['!dir'] = 'rtl'
+    ws['!cols'] = [
+      { wch: 4 }, { wch: 12 }, { wch: 16 }, { wch: 22 }, { wch: 22 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+      { wch: 10 }, { wch: 40 }, { wch: 40 }, { wch: 30 },
+    ]
+    const wb = XLSX.utils.book_new()
+    const sheetName = mode === 'daily' ? 'يومي' : mode === 'monthly' ? 'شهري' : 'فترة'
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    XLSX.writeFile(wb, `تقرير_السكن_${periodFileTag()}.xlsx`)
+    toast('✅ تم تصدير ملف إكسل')
+  }
+
   return (
     <div className="animate-in">
-      {/* فلتر التاريخ */}
+      {/* فلتر الفترة */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
-          <div className="form-group" style={{ flex: 1 }}>
-            <label>التاريخ</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-          </div>
-          <button className="btn btn-primary" onClick={load}>🔍 عرض</button>
+        {/* اختيار نوع التقرير */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+          {[
+            { id: 'daily',   label: '📅 يومي' },
+            { id: 'monthly', label: '🗓️ شهري' },
+            { id: 'range',   label: '↔️ فترة (من – إلى)' },
+          ].map(m => (
+            <button
+              key={m.id}
+              className={`wing-btn ${mode === m.id ? 'active' : ''}`}
+              onClick={() => setMode(m.id)}
+            >{m.label}</button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          {mode === 'daily' && (
+            <div className="form-group" style={{ flex: 1, minWidth: 160 }}>
+              <label>التاريخ</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+            </div>
+          )}
+          {mode === 'monthly' && (
+            <div className="form-group" style={{ flex: 1, minWidth: 160 }}>
+              <label>الشهر</label>
+              <input type="month" value={month} onChange={e => setMonth(e.target.value)} />
+            </div>
+          )}
+          {mode === 'range' && (
+            <>
+              <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
+                <label>من تاريخ *</label>
+                <input type="date" value={from} onChange={e => setFrom(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
+                <label>إلى تاريخ *</label>
+                <input type="date" value={to} onChange={e => setTo(e.target.value)} />
+              </div>
+            </>
+          )}
+          <button className="btn btn-primary" onClick={load} disabled={loading}>
+            {loading ? '⏳ جاري التحميل...' : '🔍 عرض'}
+          </button>
+          <button
+            className="btn btn-green"
+            onClick={exportExcel}
+            disabled={!records.length}
+          >
+            📊 تصدير Excel
+          </button>
           <button
             className="btn btn-danger"
             onClick={doPrint}
@@ -1231,8 +1368,12 @@ tbody td{padding:7px 6px;border:1px solid #d1e7dd;vertical-align:top;line-height
       {!loading && records.length === 0 && (
         <div className="empty-state">
           <div className="es-icon">📭</div>
-          <div className="es-title">لا توجد تقارير لهذا التاريخ</div>
-          <div className="es-sub">اختر تاريخاً آخر أو تأكد من إدخال التقارير أولاً</div>
+          <div className="es-title">لا توجد تقارير في هذه الفترة</div>
+          <div className="es-sub">
+            {mode === 'daily'
+              ? 'اختر تاريخاً آخر أو تأكد من إدخال التقارير أولاً'
+              : 'حدد الفترة ثم اضغط "عرض"'}
+          </div>
         </div>
       )}
 
@@ -1241,7 +1382,7 @@ tbody td{padding:7px 6px;border:1px solid #d1e7dd;vertical-align:top;line-height
           {/* إحصاءات سريعة */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
             {[
-              { label: 'مشرف نشط',           value: records.length, icon: '👤', color: 'var(--green)' },
+              { label: mode === 'daily' ? 'مشرف نشط' : 'إجمالي التقارير', value: records.length, icon: '👤', color: 'var(--green)' },
               { label: 'تعقيبات على مراكز',  value: records.reduce((s, r) => s + (r.otherCenters?.length || 0), 0), icon: '🏢', color: 'var(--blue)' },
               { label: 'أنشطة أُشرف عليها', value: records.reduce((s, r) => s + (r.activities?.length  || 0), 0), icon: '🎯', color: 'var(--orange)' },
               {
@@ -1260,12 +1401,13 @@ tbody td{padding:7px 6px;border:1px solid #d1e7dd;vertical-align:top;line-height
 
           {/* الجدول */}
           <div className="card">
-            <div className="card-title">📋 تفاصيل أداء المشرفين — {date}</div>
+            <div className="card-title">📋 تفاصيل أداء المشرفين — {periodLabel()}</div>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th style={{ width: 30 }}>#</th>
+                    {mode !== 'daily' && <th style={{ width: 90 }}>التاريخ</th>}
                     <th>المشرف</th>
                     <th>الجناح الأساسي</th>
                     <th>الأجنحة الأخرى</th>
@@ -1287,6 +1429,7 @@ tbody td{padding:7px 6px;border:1px solid #d1e7dd;vertical-align:top;line-height
                     return (
                       <tr key={r.id}>
                         <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--accent)' }}>{i + 1}</td>
+                        {mode !== 'daily' && <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{r.date || '—'}</td>}
                         <td style={{ fontWeight: 700 }}>{r.savedBy || '—'}</td>
                         <td style={{ fontSize: 12 }}>{wingLabel(r.wing)}</td>
                         <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>
