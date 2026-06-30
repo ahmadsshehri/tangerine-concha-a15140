@@ -764,10 +764,13 @@ function CaretakerReport() {
     try {
       const snap = await getDocs(collection(db, 'qayyim'))
       let all = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      // تضمين أي سجل يتقاطع مع الفترة المحددة (وليس المحتوى بالكامل فقط)
+      // حتى لا تختفي أسابيع القيّمين التي تمتد عبر بداية أو نهاية الشهر
       all = all.filter(r => {
-        if (r.from && r.from < from) return false
-        if (r.to   && r.to   > to)   return false
-        return true
+        const rf = r.from || r.to || ''
+        const rt = r.to   || r.from || ''
+        if (!rf && !rt) return true
+        return rf <= to && rt >= from
       })
       if (selMasanda) all = all.filter(r => r.center?.startsWith(selMasanda))
       if (selWing) {
@@ -838,8 +841,33 @@ function CaretakerReport() {
         <>
           <ExportBar count={records.length}
             onExcel={() => {
-              const headers = ['المساندة','الجناح','من','إلى','المستفيدون','الحوادث','ملاحظات']
-              const rows = records.map(r => [getMasandaName(r.center), getWingLabel(r.center), r.from||'', r.to||'', r.ben||0, r.incidents||0, r.notes||''])
+              // تصدير شامل: صف لكل يوم مُسجَّل مع درجات كل المحاور — بلا استثناء
+              const axVal = (day, key) => {
+                const ax = day?.axes?.find(a => a.key === key)
+                if (!ax) return ''
+                return ax.total ?? (ax.scores?.reduce((a, b) => a + (+b || 0), 0) ?? '')
+              }
+              const headers = [
+                'المساندة','الجناح','القيّم','من','إلى','اليوم',
+                'الالتزام','السلوك','التفاعل','السكن','الإجمالي اليومي',
+                'مخالفات اليوم','مستفيدو اليوم','إجمالي المستفيدين','إجمالي الحوادث','ملاحظات عامة'
+              ]
+              const rows = []
+              records.forEach(r => {
+                const base = [getMasandaName(r.center), getWingLabel(r.center), r.savedBy || '', r.from || '', r.to || '']
+                const days = r.days && r.days.length ? r.days : [null]
+                days.forEach(day => {
+                  if (!day) { rows.push([...base, '—','','','','','','','', r.ben||0, r.incidents||0, r.notes||'']); return }
+                  const totals = ['iltizam','suluk','tafaul','sukan'].map(k => axVal(day, k))
+                  const grand = totals.reduce((a, b) => a + (+b || 0), 0)
+                  rows.push([
+                    ...base, day.day || '—',
+                    ...totals, grand,
+                    day.violations || 0, day.beneficiaries || 0,
+                    r.ben || 0, r.incidents || 0, r.notes || ''
+                  ])
+                })
+              })
               exportToExcel(rows, headers, 'تقرير-القيمين')
             }}
             onPrint={() => {
