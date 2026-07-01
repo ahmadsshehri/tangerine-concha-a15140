@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
 import { collection, getDocs, doc, setDoc, getDoc, query, where } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
-import { MASANDAT, AXES, MOVEMENT_TYPES, TOOL_REPORT_STATUSES, FACILITY_REPORT_STATUSES } from '../../lib/constants'
+import { MASANDAT, AXES, MOVEMENT_TYPES, TOOL_REPORT_STATUSES, FACILITY_REPORT_STATUSES, QDAYS } from '../../lib/constants'
 import SupervisorBiasReport from './SupervisorBiasReport'
 import MonthlyReport from './MonthlyReport'
 
@@ -25,7 +25,54 @@ function exportToExcel(rows, headers, filename) {
   a.click()
 }
 
+// تصدير عدة أوراق في ملف Excel واحد
+function exportSheetsToExcel(sheets, filename) {
+  const esc = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  const wsXml = sheets.map(s => {
+    const hRow = s.headers.map(h => `<Cell ss:StyleID="h"><Data ss:Type="String">${esc(h)}</Data></Cell>`).join('')
+    const dRows = s.rows.map(row =>
+      '<Row>' + row.map(c => `<Cell><Data ss:Type="String">${esc(c)}</Data></Cell>`).join('') + '</Row>'
+    ).join('')
+    return `<Worksheet ss:Name="${esc(s.name)}"><Table><Row>${hRow}</Row>${dRows}</Table></Worksheet>`
+  }).join('')
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles><Style ss:ID="h"><Font ss:Bold="1"/><Interior ss:Color="#D9E1F2" ss:Pattern="Solid"/></Style></Styles>
+${wsXml}</Workbook>`
+  const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = filename + '.xls'
+  a.click()
+}
+
 // ─── طباعة ────────────────────────────────────────────────────────────────────
+// طباعة عدة جداول في مستند واحد
+function printTables(title, tables) {
+  const sections = tables.map(t => {
+    if (!t.rows.length) return ''
+    const th = t.headers.map(h => `<th>${h}</th>`).join('')
+    const tr = t.rows.map(row => `<tr>${row.map(c => `<td>${String(c ?? '—')}</td>`).join('')}</tr>`).join('')
+    return `${t.subtitle ? `<h3>${t.subtitle}</h3>` : ''}<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`
+  }).join('<div style="height:20px"></div>')
+  const html = `<html dir="rtl"><head><meta charset="UTF-8"><style>
+    body{font-family:Arial,sans-serif;font-size:11px;direction:rtl}
+    h2{text-align:center;margin-bottom:12px}
+    h3{margin:16px 0 8px;color:#1a4d3a}
+    table{width:100%;border-collapse:collapse;margin-bottom:8px}
+    th,td{border:1px solid #ccc;padding:5px 8px;text-align:center}
+    th{background:#d9e1f2;font-weight:bold}
+    tr:nth-child(even){background:#f5f7fa}
+    .ft{text-align:center;margin-top:16px;font-size:11px;color:#888}
+    @media print{@page{size:A4 landscape;margin:8mm;}}
+  </style></head><body>
+  <h2>${title}</h2>${sections}
+  <div class="ft">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>`
+  const w = window.open('', '_blank')
+  w.document.write(html); w.document.close()
+  setTimeout(() => w.print(), 400)
+}
+
 function printTable(title, headers, rows) {
   const th = headers.map(h => `<th>${h}</th>`).join('')
   const tr = rows.map(row => `<tr>${row.map(c => `<td>${String(c ?? '—')}</td>`).join('')}</tr>`).join('')
@@ -796,6 +843,68 @@ function CaretakerReport() {
     return isNaN(w) ? w : `جناح ${w}`
   }
 
+  // ─── بيانات جدول البرامج والأنشطة ─────────────────────────────────────────
+  const progTotals = (p) => ({
+    n: (p.days || []).reduce((s, d) => s + (+d?.n || 0), 0),
+    h: (p.days || []).reduce((s, d) => s + (+d?.h || 0), 0),
+  })
+  const recordHasProgramData = (r) =>
+    (r.programs || []).some(p => (p.days || []).some(d => (+d?.n || 0) > 0 || (+d?.h || 0) > 0))
+
+  // رؤوس أعمدة تصدير البرامج (عدد/حضور لكل يوم + الإجمالي)
+  const PROG_HEADERS = [
+    'المساندة', 'الجناح', 'من', 'إلى', 'البرنامج',
+    ...QDAYS.flatMap(d => [`${d} - عدد`, `${d} - حضور`]),
+    'إجمالي العدد', 'إجمالي الحضور',
+  ]
+  const buildProgramRows = () => {
+    const rows = []
+    records.forEach(r => {
+      if (!recordHasProgramData(r)) return
+      const base = [getMasandaName(r.center), getWingLabel(r.center), r.from || '', r.to || '']
+      ;(r.programs || []).forEach(p => {
+        const cells = QDAYS.flatMap((_, di) => {
+          const d = p.days?.[di] || {}
+          return [d.n || 0, d.h || 0]
+        })
+        const t = progTotals(p)
+        rows.push([...base, p.name || '—', ...cells, t.n, t.h])
+      })
+    })
+    return rows
+  }
+
+  // بناء صفوف التقييم اليومي (تُستخدم في Excel و PDF)
+  const DAILY_HEADERS = [
+    'المساندة', 'الجناح', 'القيّم', 'من', 'إلى', 'اليوم',
+    'الالتزام', 'السلوك', 'التفاعل', 'السكن', 'الإجمالي اليومي',
+    'مخالفات اليوم', 'مستفيدو اليوم', 'إجمالي المستفيدين', 'إجمالي الحوادث', 'ملاحظات عامة',
+  ]
+  const buildDailyRows = () => {
+    const axVal = (day, key) => {
+      const ax = day?.axes?.find(a => a.key === key)
+      if (!ax) return ''
+      return ax.total ?? (ax.scores?.reduce((a, b) => a + (+b || 0), 0) ?? '')
+    }
+    const rows = []
+    records.forEach(r => {
+      const base = [getMasandaName(r.center), getWingLabel(r.center), r.savedBy || '', r.from || '', r.to || '']
+      const days = r.days && r.days.length ? r.days : [null]
+      days.forEach(day => {
+        if (!day) { rows.push([...base, '—', '', '', '', '', '', '', '', r.ben || 0, r.incidents || 0, r.notes || '']); return }
+        const totals = ['iltizam', 'suluk', 'tafaul', 'sukan'].map(k => axVal(day, k))
+        const grand = totals.reduce((a, b) => a + (+b || 0), 0)
+        rows.push([
+          ...base, day.day || '—',
+          ...totals, grand,
+          day.violations || 0, day.beneficiaries || 0,
+          r.ben || 0, r.incidents || 0, r.notes || '',
+        ])
+      })
+    })
+    return rows
+  }
+
   return (
     <div className="animate-in">
       <div className="card" style={{ marginBottom: 16 }}>
@@ -841,39 +950,17 @@ function CaretakerReport() {
         <>
           <ExportBar count={records.length}
             onExcel={() => {
-              // تصدير شامل: صف لكل يوم مُسجَّل مع درجات كل المحاور — بلا استثناء
-              const axVal = (day, key) => {
-                const ax = day?.axes?.find(a => a.key === key)
-                if (!ax) return ''
-                return ax.total ?? (ax.scores?.reduce((a, b) => a + (+b || 0), 0) ?? '')
-              }
-              const headers = [
-                'المساندة','الجناح','القيّم','من','إلى','اليوم',
-                'الالتزام','السلوك','التفاعل','السكن','الإجمالي اليومي',
-                'مخالفات اليوم','مستفيدو اليوم','إجمالي المستفيدين','إجمالي الحوادث','ملاحظات عامة'
-              ]
-              const rows = []
-              records.forEach(r => {
-                const base = [getMasandaName(r.center), getWingLabel(r.center), r.savedBy || '', r.from || '', r.to || '']
-                const days = r.days && r.days.length ? r.days : [null]
-                days.forEach(day => {
-                  if (!day) { rows.push([...base, '—','','','','','','','', r.ben||0, r.incidents||0, r.notes||'']); return }
-                  const totals = ['iltizam','suluk','tafaul','sukan'].map(k => axVal(day, k))
-                  const grand = totals.reduce((a, b) => a + (+b || 0), 0)
-                  rows.push([
-                    ...base, day.day || '—',
-                    ...totals, grand,
-                    day.violations || 0, day.beneficiaries || 0,
-                    r.ben || 0, r.incidents || 0, r.notes || ''
-                  ])
-                })
-              })
-              exportToExcel(rows, headers, 'تقرير-القيمين')
+              // تصدير شامل: ورقة للتقييم اليومي وورقة للبرامج والأنشطة — بلا استثناء
+              exportSheetsToExcel([
+                { name: 'التقييم اليومي',  headers: DAILY_HEADERS, rows: buildDailyRows() },
+                { name: 'البرامج والأنشطة', headers: PROG_HEADERS,  rows: buildProgramRows() },
+              ], 'تقرير-القيمين')
             }}
             onPrint={() => {
-              const headers = ['المساندة','الجناح','من','إلى','المستفيدون','الحوادث']
-              const rows = records.map(r => [getMasandaName(r.center), getWingLabel(r.center), r.from||'', r.to||'', r.ben||0, r.incidents||0])
-              printTable('تقرير تقييم القيّمين', headers, rows)
+              printTables('تقرير تقييم القيّمين', [
+                { subtitle: '📊 التقييم اليومي',      headers: DAILY_HEADERS, rows: buildDailyRows() },
+                { subtitle: '📋 البرامج والأنشطة',    headers: PROG_HEADERS,  rows: buildProgramRows() },
+              ])
             }}
           />
 
@@ -957,6 +1044,55 @@ function CaretakerReport() {
                         <div style={{ fontSize: 13 }}>{r.notes}</div>
                       </div>
                       <FollowUpCell recordId={r.id} field="general_notes" existing={fu['general_notes']} />
+                    </div>
+                  )}
+
+                  {/* جدول البرامج والأنشطة */}
+                  {recordHasProgramData(r) && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', marginBottom: 6 }}>📋 جدول البرامج والأنشطة</div>
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th rowSpan={2}>البرنامج</th>
+                              {QDAYS.map((d, di) => <th key={di} colSpan={2} style={{ textAlign: 'center' }}>{d}</th>)}
+                              <th colSpan={2} style={{ textAlign: 'center' }}>الإجمالي</th>
+                            </tr>
+                            <tr>
+                              {QDAYS.map((_, di) => (
+                                <Fragment key={di}>
+                                  <th style={{ fontSize: 10 }}>عدد</th>
+                                  <th style={{ fontSize: 10 }}>حضور</th>
+                                </Fragment>
+                              ))}
+                              <th style={{ fontSize: 10 }}>عدد</th>
+                              <th style={{ fontSize: 10 }}>حضور</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(r.programs || []).map((p, pi) => {
+                              const t = progTotals(p)
+                              return (
+                                <tr key={pi}>
+                                  <td style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{p.name}</td>
+                                  {QDAYS.map((_, di) => {
+                                    const d = p.days?.[di] || {}
+                                    return (
+                                      <Fragment key={di}>
+                                        <td style={{ textAlign: 'center' }}>{d.n || 0}</td>
+                                        <td style={{ textAlign: 'center' }}>{d.h || 0}</td>
+                                      </Fragment>
+                                    )
+                                  })}
+                                  <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--accent)' }}>{t.n}</td>
+                                  <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--green)' }}>{t.h}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>
