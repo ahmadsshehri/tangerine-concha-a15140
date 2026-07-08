@@ -82,11 +82,15 @@ function DetailPanel({ statusId, detail, onChange }) {
 
   if (statusId === 'task') return (
     <div>
-      <div style={grid3}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
         <div>
           <label style={labelStyle}>جهة التكليف</label>
-          <input style={inputStyle} placeholder="أمن السجن، سجن الطائف..." 
+          <input style={inputStyle} placeholder="أمن السجن، سجن الطائف..."
             value={detail.taskPlace||''} onChange={f('taskPlace')} />
+        </div>
+        <div>
+          <label style={labelStyle}>تاريخ البداية</label>
+          <input style={inputStyle} type="date" value={detail.startDate||''} onChange={f('startDate')} />
         </div>
         <div>
           <label style={labelStyle}>نوع المدة</label>
@@ -102,11 +106,21 @@ function DetailPanel({ statusId, detail, onChange }) {
             value={detail.taskDays||''} onChange={f('taskDays')} />
         </div>
       </div>
-      <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-        {detail.taskDurType === 'open'
-          ? '⚠️ التكليف المفتوح يستمر تلقائياً حتى يُسجَّل حضور يدوي'
-          : '📅 يحسب النظام تلقائياً الأيام القادمة'}
-      </div>
+      {detail.startDate && detail.taskDurType !== 'open' && detail.taskDays ? (
+        <div style={{
+          marginTop: 8, fontSize: 12,
+          color: 'var(--blue)', background: 'var(--blue-dim)',
+          padding: '6px 10px', borderRadius: 8
+        }}>
+          📅 ينتهي في: {addDays(detail.startDate, Number(detail.taskDays))} · يحسبها النظام تلقائياً للأيام القادمة
+        </div>
+      ) : (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+          {detail.taskDurType === 'open'
+            ? '⚠️ التكليف المفتوح يستمر تلقائياً حتى يُسجَّل حضور يدوي'
+            : '📅 أدخل تاريخ البداية وعدد الأيام ليحسبها النظام تلقائياً'}
+        </div>
+      )}
     </div>
   )
 
@@ -208,7 +222,8 @@ function autoStatus(staffId, prevRecord) {
       && pr.detail?.startDate && pr.detail?.taskDays) {
     const endDate = addDays(pr.detail.startDate, Number(pr.detail.taskDays))
     if (endDate > today()) {
-      return { statusId: 'task', detail: pr.detail, auto: true }
+      const remaining = daysBetween(today(), endDate)
+      return { statusId: 'task', detail: { ...pr.detail, remaining }, auto: true }
     }
   }
   return null
@@ -225,8 +240,12 @@ function detailSummary(statusId, detail, statuses) {
     return t
   }
   if (statusId === 'task') {
-    const dur = detail.taskDurType === 'open' ? 'مفتوح' : `${detail.taskDays || ''} يوم`
-    return `${detail.taskPlace || '—'} · ${dur}`
+    const place = detail.taskPlace || '—'
+    if (detail.taskDurType === 'open') return `${place} · مفتوح`
+    const rem = detail.remaining
+    if (rem != null) return `${place} · متبقي ${rem} يوم`
+    if (detail.taskDays) return `${place} · ${detail.taskDays} يوم`
+    return place
   }
   if (statusId === 'mission') {
     const t = MISSION_TYPES.find(x => x.id === detail.missionType)?.label || ''
@@ -562,17 +581,25 @@ export default function DailySheet() {
                   <th style={pTh}>الاسم</th>
                   <th style={pTh}>الرتبة</th>
                   <th style={pTh}>طبيعة العمل</th>
+                  <th style={pTh}>ملاحظات</th>
                 </tr>
               </thead>
               <tbody>
-                {g.members.map((s, i) => (
-                  <tr key={s.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                    <td style={pTd}>{i + 1}</td>
-                    <td style={{ ...pTd, fontWeight: 600 }}>{s.name}</td>
-                    <td style={{ ...pTd, color: '#666' }}>{s.rank || '—'}</td>
-                    <td style={pTd}>{jobLabel(s.jobTypeId)}</td>
-                  </tr>
-                ))}
+                {g.members.map((s, i) => {
+                  const rec = records[s.id]
+                  const note = rec?.statusId && rec?.detail
+                    ? detailSummary(rec.statusId, rec.detail, statuses)
+                    : '—'
+                  return (
+                    <tr key={s.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                      <td style={pTd}>{i + 1}</td>
+                      <td style={{ ...pTd, fontWeight: 600 }}>{s.name}</td>
+                      <td style={{ ...pTd, color: '#666' }}>{s.rank || '—'}</td>
+                      <td style={pTd}>{jobLabel(s.jobTypeId)}</td>
+                      <td style={{ ...pTd, color: '#555', fontSize: 10 }}>{note}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
