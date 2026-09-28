@@ -6,6 +6,7 @@ import { useToast } from '../../components/Toast'
 import { MASANDAT, AXES, MOVEMENT_TYPES, TOOL_REPORT_STATUSES, FACILITY_REPORT_STATUSES, QDAYS } from '../../lib/constants'
 import SupervisorBiasReport from './SupervisorBiasReport'
 import MonthlyReport from './MonthlyReport'
+import { monthBounds, weeksBetween, weekStartISO, openPrintWindow, escHtml } from '../../lib/periodUtils'
 
 // ─── تصدير Excel ──────────────────────────────────────────────────────────────
 function exportToExcel(rows, headers, filename) {
@@ -791,6 +792,136 @@ function SupervisorReport() {
   )
 }
 
+// ─── جدول تسليم تقارير القيّمين — الجناح × الأسبوع ───────────────────────────
+const wingKey = (m, w) => `${m.id}_${String(w).replace(/\s/g, '_')}`
+const wingName = (w) => isNaN(w) ? `مركز ${w}` : `جناح ${w}`
+
+// مجموع درجات اليوم من 60 (مجموع المحاور الأربعة)
+const qDayTotal = (day) => (day?.axes || []).reduce((s, ax) =>
+  s + (+(ax.total ?? (ax.scores || []).reduce((a, b) => a + (+b || 0), 0)) || 0), 0)
+
+function buildDeliveryGrid(records, period) {
+  const weeks = weeksBetween(period.from, period.to)
+  const groups = MASANDAT
+    .filter(m => !period.masanda || m.id === period.masanda)
+    .map(m => {
+      const wings = m.wings
+        .filter(w => !period.wing || String(w) === String(period.wing))
+        .map(w => {
+          const key = wingKey(m, w)
+          const recs = records.filter(r => r.center === key)
+          const marks = weeks.map(wk => recs.some(r => r.from && weekStartISO(r.from) === wk.start))
+          const dayTotals = recs.flatMap(r => (r.days || []).map(qDayTotal)).filter(t => t > 0)
+          const avg = dayTotals.length ? dayTotals.reduce((a, b) => a + b, 0) / dayTotals.length : null
+          return { w, name: wingName(w), marks, count: marks.filter(Boolean).length, avg }
+        })
+      return { m, wings, delivered: wings.filter(x => x.count > 0).length }
+    })
+    .filter(g => g.wings.length)
+  return { weeks, groups }
+}
+
+function printDeliveryGrid({ weeks, groups }, period) {
+  const head = `<tr><th class="nm">المركز</th>${weeks.map((_, i) => `<th>أ${i + 1}</th>`).join('')}<th>التقارير</th><th>المتوسط/60</th></tr>`
+  const body = groups.map(g => {
+    const rows = g.wings.map(x => `<tr class="${x.count ? 'on' : 'off'}">
+      <td class="nm">${escHtml(x.name)}</td>
+      ${x.marks.map(v => `<td>${v ? '<span class="dot">●</span>' : '<span class="dash">—</span>'}</td>`).join('')}
+      <td>${x.count}</td><td>${x.avg !== null ? x.avg.toFixed(1) : '—'}</td></tr>`).join('')
+    return `<table class="grp"><thead>${head}<tr class="gh"><td colspan="${weeks.length + 3}">${escHtml(g.m.name)} — ${g.delivered} من ${g.wings.length}</td></tr></thead><tbody>${rows}</tbody></table>`
+  }).join('')
+  const legend = weeks.map((wk, i) => `أ${i + 1}: ${wk.label}`).join(' · ')
+  const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>جدول تسليم تقارير القيّمين</title><style>
+    *{box-sizing:border-box}
+    body{font-family:Tahoma,Arial,sans-serif;font-size:10.5px;color:#1e2a3a;margin:0;padding:10px;direction:rtl}
+    h2{margin:0 0 4px;font-size:16px;color:#1e3a5f;border-right:4px solid #c9a227;padding-right:8px}
+    .sub{color:#667;margin:0 0 10px;font-size:11px}
+    .cols{column-count:2;column-gap:14px}
+    table.grp{width:100%;border-collapse:collapse;margin-bottom:10px;break-inside:avoid;page-break-inside:avoid;border-radius:6px;overflow:hidden}
+    th{background:#1e3a5f;color:#fff;font-weight:700;padding:5px 4px;font-size:10px}
+    tr.gh td{background:#1e3a5f;color:#fff;text-align:center;font-weight:700;padding:5px;border-top:1px solid #34557e}
+    td{padding:4px;text-align:center;border-bottom:1px solid #e6e9ef}
+    .nm{text-align:right;padding-right:8px}
+    tr.off td{color:#9aa3ae}
+    tr.on td{font-weight:700}
+    tr:nth-child(even) td{background:#f7f9fb}
+    .dot{color:#1f6b45;font-size:12px}
+    .dash{color:#b5bcc5}
+    .legend{margin-top:8px;font-size:10px;color:#556}
+    @media print{@page{size:A4 portrait;margin:8mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+  <h2>جدول تسليم التقارير — المركز × الأسبوع</h2>
+  <p class="sub">الفترة: ${escHtml(period.from)} ← ${escHtml(period.to)}</p>
+  <div class="cols">${body}</div>
+  <div class="legend">${escHtml(legend)} — ● تعني استلام تقرير أسبوعي، — تعني عدم الاستلام. المتوسط = متوسط الدرجة اليومية من 60.</div>
+  <div class="legend">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>
+  </body></html>`
+  return openPrintWindow(html)
+}
+
+function CaretakerDeliveryGrid({ records, period }) {
+  const toast = useToast()
+  const grid = buildDeliveryGrid(records, period)
+  const { weeks, groups } = grid
+  const totalWings = groups.reduce((s, g) => s + g.wings.length, 0)
+  const totalDelivered = groups.reduce((s, g) => s + g.delivered, 0)
+  if (!weeks.length) return null
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div className="card-title" style={{ margin: 0 }}>📅 جدول تسليم التقارير — الجناح × الأسبوع</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>سلّم {totalDelivered} من {totalWings} جناح</span>
+          <button className="btn btn-outline btn-sm"
+            onClick={() => { if (!printDeliveryGrid(grid, period)) toast('⚠️ اسمح بالنوافذ المنبثقة للطباعة', 'warn') }}>
+            🖨️ طباعة الجدول
+          </button>
+        </div>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>الجناح</th>
+              {weeks.map((wk, i) => (
+                <th key={i} style={{ textAlign: 'center' }} title={`${wk.start} ← ${wk.end}`}>
+                  أ{i + 1}<div style={{ fontSize: 9, fontWeight: 400, opacity: .75 }}>{wk.label}</div>
+                </th>
+              ))}
+              <th style={{ textAlign: 'center' }}>التقارير</th>
+              <th style={{ textAlign: 'center' }}>المتوسط/60</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map(g => (
+              <Fragment key={g.m.id}>
+                <tr>
+                  <td colSpan={weeks.length + 3} style={{ background: '#1e3a5f', color: '#fff', fontWeight: 800, textAlign: 'center' }}>
+                    {g.m.name} — {g.delivered} من {g.wings.length}
+                  </td>
+                </tr>
+                {g.wings.map(x => (
+                  <tr key={x.w} style={{ color: x.count ? undefined : 'var(--text-muted)' }}>
+                    <td style={{ fontWeight: x.count ? 800 : 400 }}>{x.name}</td>
+                    {x.marks.map((v, i) => (
+                      <td key={i} style={{ textAlign: 'center' }}>
+                        {v ? <span style={{ color: 'var(--green)', fontSize: 16 }}>●</span> : <span style={{ opacity: .4 }}>—</span>}
+                      </td>
+                    ))}
+                    <td style={{ textAlign: 'center', fontWeight: x.count ? 800 : 400 }}>{x.count}</td>
+                    <td style={{ textAlign: 'center', fontWeight: x.count ? 800 : 400 }}>{x.avg !== null ? x.avg.toFixed(1) : '—'}</td>
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ─── تقارير القيّمين ──────────────────────────────────────────────────────────
 function CaretakerReport() {
   const toast = useToast()
@@ -802,11 +933,20 @@ function CaretakerReport() {
   const [selMasanda, setSelMasanda] = useState('')
   const [selWing,    setSelWing]    = useState('')
   const [selAxis,    setSelAxis]    = useState('')
+  const [month,      setMonth]      = useState('')
+  const [loadedPeriod, setLoadedPeriod] = useState(null) // الفترة والفلاتر التي حُمّلت بها النتائج
 
   const wingOptions = selMasanda ? MASANDAT.find(m => m.id === selMasanda)?.wings || [] : []
 
+  // اختيار شهر يملأ حقلي من/إلى تلقائياً
+  const pickMonth = (ym) => {
+    setMonth(ym)
+    if (ym) { const b = monthBounds(ym); setFrom(b.from); setTo(b.to) }
+  }
+
   const load = async () => {
-    if (!from || !to) { toast('⚠️ حدد الفترة الزمنية', 'warn'); return }
+    if (!from || !to) { toast('⚠️ حدد الشهر أو الفترة الزمنية', 'warn'); return }
+    if (from > to)    { toast('⚠️ تاريخ البداية بعد تاريخ النهاية', 'warn'); return }
     setLoading(true)
     try {
       const snap = await getDocs(collection(db, 'qayyim'))
@@ -826,6 +966,7 @@ function CaretakerReport() {
       }
       all.sort((a, b) => (b.from || '') > (a.from || '') ? 1 : -1)
       setRecords(all)
+      setLoadedPeriod({ from, to, masanda: selMasanda, wing: selWing })
       const fu = await fetchFollowups(all.map(r => r.id))
       setFollowups(fu)
     } catch (e) { toast('❌ ' + e.message, 'error') }
@@ -910,8 +1051,9 @@ function CaretakerReport() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title">🔍 فلاتر البحث</div>
         <div className="form-row fr-3" style={{ marginBottom: 12 }}>
-          <div className="form-group"><label>من تاريخ *</label><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></div>
-          <div className="form-group"><label>إلى تاريخ *</label><input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
+          <div className="form-group"><label>الشهر</label><input type="month" value={month} onChange={e => pickMonth(e.target.value)} /></div>
+          <div className="form-group"><label>من تاريخ *</label><input type="date" value={from} onChange={e => { setFrom(e.target.value); setMonth('') }} /></div>
+          <div className="form-group"><label>إلى تاريخ *</label><input type="date" value={to} onChange={e => { setTo(e.target.value); setMonth('') }} /></div>
           <div className="form-group">
             <label>المساندة</label>
             <select value={selMasanda} onChange={e => { setSelMasanda(e.target.value); setSelWing('') }}>
@@ -945,6 +1087,10 @@ function CaretakerReport() {
       </div>
 
       {loading && <div style={{ height: 200 }} className="skeleton" />}
+
+      {!loading && loadedPeriod && (
+        <CaretakerDeliveryGrid records={records} period={loadedPeriod} />
+      )}
 
       {!loading && records.length > 0 && (
         <>

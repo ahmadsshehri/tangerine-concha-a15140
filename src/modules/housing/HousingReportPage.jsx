@@ -8,6 +8,7 @@ import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
 import { MASANDAT, TODAY } from '../../lib/constants'
+import { monthBounds, daysBetween, openPrintWindow, escHtml } from '../../lib/periodUtils'
 
 // ─── ثوابت ────────────────────────────────────────────────────────────────────
 const ACTIVITY_TYPES = ['داخلي', 'خارجي']
@@ -600,9 +601,17 @@ function SupervisorsTab() {
   const [to,       setTo]       = useState('')
   const [selSuper, setSelSuper] = useState('') // '' = كل المشرفين، اسم = مشرف محدد
   const [loaded,   setLoaded]   = useState(false)
+  const [month,    setMonth]    = useState('')
+  const [period,   setPeriod]   = useState(null) // الفترة التي حُمّلت بها النتائج
+
+  const pickMonth = (ym) => {
+    setMonth(ym)
+    if (ym) { const b = monthBounds(ym); setFrom(b.from); setTo(b.to) }
+  }
 
   const load = async () => {
-    if (!from || !to) { toast('⚠️ حدد الفترة الزمنية', 'warn'); return }
+    if (!from || !to) { toast('⚠️ حدد الشهر أو الفترة الزمنية', 'warn'); return }
+    if (from > to)    { toast('⚠️ تاريخ البداية بعد تاريخ النهاية', 'warn'); return }
     setLoading(true)
     try {
       const snap = await getDocs(collection(db, 'housingReports'))
@@ -610,6 +619,7 @@ function SupervisorsTab() {
       recs = recs.filter(r => r.date >= from && r.date <= to)
       recs.sort((a, b) => (b.date || '') > (a.date || '') ? 1 : -1)
       setRecords(recs)
+      setPeriod({ from, to })
       setLoaded(true)
       setSelSuper('')
     } catch (e) { toast('❌ ' + e.message, 'error') }
@@ -660,12 +670,16 @@ function SupervisorsTab() {
         <div className="card-title">🔍 فلاتر البحث</div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
+            <label>الشهر</label>
+            <input type="month" value={month} onChange={e => pickMonth(e.target.value)} />
+          </div>
+          <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
             <label>من تاريخ *</label>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} />
+            <input type="date" value={from} onChange={e => { setFrom(e.target.value); setMonth('') }} />
           </div>
           <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
             <label>إلى تاريخ *</label>
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} />
+            <input type="date" value={to} onChange={e => { setTo(e.target.value); setMonth('') }} />
           </div>
           <button className="btn btn-primary" onClick={load} disabled={loading}>
             {loading ? '⏳ جاري التحميل...' : '🔍 عرض'}
@@ -706,6 +720,9 @@ function SupervisorsTab() {
               </div>
             ))}
           </div>
+
+          {/* جدول تسجيل التقارير — العامل × اليوم */}
+          {period && <StaffDaysGrid records={records} period={period} />}
 
           {/* اختيار مشرف */}
           <div className="card" style={{ marginBottom: 16 }}>
@@ -822,6 +839,97 @@ function SupervisorsTab() {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+// ─── جدول تسجيل التقارير — العامل × اليوم ───────────────────────────────────
+function buildStaffDays(records, period) {
+  const days = daysBetween(period.from, period.to)
+  const names = [...new Set(records.map(r => r.savedBy).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'ar'))
+  const rows = names.map(name => {
+    const dates = new Set(records.filter(r => r.savedBy === name).map(r => r.date))
+    const marks = days.map(d => dates.has(d.iso))
+    return { name, marks, count: marks.filter(Boolean).length }
+  })
+  return { days, rows }
+}
+
+function printStaffDays({ days, rows }, period) {
+  const head = `<tr><th class="nm">م</th><th class="nm">اسم العامل</th>${days.map(d => `<th><div>${d.day}</div><div class="dw">${escHtml(d.dow.slice(0, 3))}</div></th>`).join('')}<th>المجموع</th></tr>`
+  const body = rows.map((r, i) => `<tr><td>${i + 1}</td><td class="nm">${escHtml(r.name)}</td>${r.marks.map(v => `<td>${v ? '<span class="dot">●</span>' : ''}</td>`).join('')}<td class="tot">${r.count}</td></tr>`).join('')
+  const dayTotals = days.map((_, di) => rows.filter(r => r.marks[di]).length)
+  const foot = `<tr class="ft"><td colspan="2" class="nm">عدد المسجّلين</td>${dayTotals.map(n => `<td>${n || ''}</td>`).join('')}<td class="tot">${rows.reduce((s, r) => s + r.count, 0)}</td></tr>`
+  const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>سجل تقارير مشرفي السكن</title><style>
+    *{box-sizing:border-box}
+    body{font-family:Tahoma,Arial,sans-serif;font-size:10px;color:#1e2a3a;margin:0;padding:10px;direction:rtl}
+    h2{margin:0 0 4px;font-size:16px;color:#1e3a5f;border-right:4px solid #c9a227;padding-right:8px}
+    .sub{color:#667;margin:0 0 10px;font-size:11px}
+    table{width:100%;border-collapse:collapse;table-layout:auto}
+    th{background:#1e3a5f;color:#fff;font-weight:700;padding:4px 2px;font-size:9.5px;border:1px solid #34557e}
+    th .dw{font-weight:400;font-size:8px;opacity:.8}
+    td{border:1px solid #d8dde5;padding:4px 2px;text-align:center;height:20px}
+    .nm{text-align:right;padding-right:6px;white-space:nowrap}
+    tr:nth-child(even) td{background:#f7f9fb}
+    .dot{color:#1f6b45;font-size:12px}
+    .tot{font-weight:700;background:#eef2f7}
+    tr.ft td{font-weight:700;background:#eef2f7}
+    .legend{margin-top:8px;font-size:10px;color:#556}
+    @media print{@page{size:A4 landscape;margin:7mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+  <h2>سجل تقارير مشرفي السكن — العامل × اليوم</h2>
+  <p class="sub">الفترة: ${escHtml(period.from)} ← ${escHtml(period.to)} · عدد العاملين: ${rows.length}</p>
+  <table><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>
+  <div class="legend">● تعني أن العامل سجّل تقريراً في ذلك اليوم.</div>
+  <div class="legend">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>
+  </body></html>`
+  return openPrintWindow(html)
+}
+
+function StaffDaysGrid({ records, period }) {
+  const toast = useToast()
+  const grid = buildStaffDays(records, period)
+  const { days, rows } = grid
+  if (!days.length || !rows.length) return null
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div className="card-title" style={{ margin: 0 }}>🗓️ سجل التقارير — العامل × اليوم</div>
+        <button className="btn btn-outline btn-sm"
+          onClick={() => { if (!printStaffDays(grid, period)) toast('⚠️ اسمح بالنوافذ المنبثقة للطباعة', 'warn') }}>
+          🖨️ طباعة السجل
+        </button>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style={{ whiteSpace: 'nowrap' }}>اسم العامل</th>
+              {days.map(d => (
+                <th key={d.iso} style={{ textAlign: 'center', padding: '6px 4px', minWidth: 26 }} title={`${d.dow} ${d.iso}`}>
+                  {d.day}<div style={{ fontSize: 9, fontWeight: 400, opacity: .7 }}>{d.dow.slice(0, 3)}</div>
+                </th>
+              ))}
+              <th style={{ textAlign: 'center' }}>المجموع</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.name}>
+                <td style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{r.name}</td>
+                {r.marks.map((v, i) => (
+                  <td key={i} style={{ textAlign: 'center', padding: '6px 2px' }}>
+                    {v && <span style={{ color: 'var(--green)', fontSize: 14 }}>●</span>}
+                  </td>
+                ))}
+                <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--accent)' }}>{r.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
