@@ -810,7 +810,8 @@ function buildDeliveryGrid(records, period) {
         .map(w => {
           const key = wingKey(m, w)
           const recs = records.filter(r => r.center === key)
-          const marks = weeks.map(wk => recs.some(r => r.from && weekStartISO(r.from) === wk.start))
+          // لكل أسبوع: سجل التقرير المستلم (أو null) لمعرفة من سجّله وفتحه
+          const marks = weeks.map(wk => recs.find(r => r.from && weekStartISO(r.from) === wk.start) || null)
           const dayTotals = recs.flatMap(r => (r.days || []).map(qDayTotal)).filter(t => t > 0)
           const avg = dayTotals.length ? dayTotals.reduce((a, b) => a + b, 0) / dayTotals.length : null
           return { w, name: wingName(w), marks, count: marks.filter(Boolean).length, avg }
@@ -826,7 +827,7 @@ function printDeliveryGrid({ weeks, groups }, period) {
   const body = groups.map(g => {
     const rows = g.wings.map(x => `<tr class="${x.count ? 'on' : 'off'}">
       <td class="nm">${escHtml(x.name)}</td>
-      ${x.marks.map(v => `<td>${v ? '<span class="dot">●</span>' : '<span class="dash">—</span>'}</td>`).join('')}
+      ${x.marks.map(v => `<td>${v ? `<span class="dot">●</span>${v.savedBy ? `<div class="by">${escHtml(v.savedBy)}</div>` : ''}` : '<span class="dash">—</span>'}</td>`).join('')}
       <td>${x.count}</td><td>${x.avg !== null ? x.avg.toFixed(1) : '—'}</td></tr>`).join('')
     return `<table class="grp"><thead>${head}<tr class="gh"><td colspan="${weeks.length + 3}">${escHtml(g.m.name)} — ${g.delivered} من ${g.wings.length}</td></tr></thead><tbody>${rows}</tbody></table>`
   }).join('')
@@ -836,7 +837,7 @@ function printDeliveryGrid({ weeks, groups }, period) {
     body{font-family:Tahoma,Arial,sans-serif;font-size:10.5px;color:#1e2a3a;margin:0;padding:10px;direction:rtl}
     h2{margin:0 0 4px;font-size:16px;color:#1e3a5f;border-right:4px solid #c9a227;padding-right:8px}
     .sub{color:#667;margin:0 0 10px;font-size:11px}
-    .cols{column-count:2;column-gap:14px}
+    .by{font-size:8px;font-weight:400;color:#556;line-height:1.2;margin-top:1px;word-break:break-word}
     table.grp{width:100%;border-collapse:collapse;margin-bottom:10px;break-inside:avoid;page-break-inside:avoid;border-radius:6px;overflow:hidden}
     th{background:#1e3a5f;color:#fff;font-weight:700;padding:5px 4px;font-size:10px}
     tr.gh td{background:#1e3a5f;color:#fff;text-align:center;font-weight:700;padding:5px;border-top:1px solid #34557e}
@@ -852,14 +853,14 @@ function printDeliveryGrid({ weeks, groups }, period) {
   </style></head><body>
   <h2>جدول تسليم التقارير — المركز × الأسبوع</h2>
   <p class="sub">الفترة: ${escHtml(period.from)} ← ${escHtml(period.to)}</p>
-  <div class="cols">${body}</div>
+  ${body}
   <div class="legend">${escHtml(legend)} — ● تعني استلام تقرير أسبوعي، — تعني عدم الاستلام. المتوسط = متوسط الدرجة اليومية من 60.</div>
   <div class="legend">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>
   </body></html>`
   return openPrintWindow(html)
 }
 
-function CaretakerDeliveryGrid({ records, period }) {
+function CaretakerDeliveryGrid({ records, period, onOpen }) {
   const toast = useToast()
   const grid = buildDeliveryGrid(records, period)
   const { weeks, groups } = grid
@@ -870,7 +871,10 @@ function CaretakerDeliveryGrid({ records, period }) {
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <div className="card-title" style={{ margin: 0 }}>📅 جدول تسليم التقارير — الجناح × الأسبوع</div>
+        <div>
+          <div className="card-title" style={{ margin: 0 }}>📅 جدول تسليم التقارير — الجناح × الأسبوع</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>اضغط على النقطة لفتح التقرير — التقارير المسجلة بالتفصيل أسفل الجدول</div>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>سلّم {totalDelivered} من {totalWings} جناح</span>
           <button className="btn btn-outline btn-sm"
@@ -906,7 +910,13 @@ function CaretakerDeliveryGrid({ records, period }) {
                     <td style={{ fontWeight: x.count ? 800 : 400 }}>{x.name}</td>
                     {x.marks.map((v, i) => (
                       <td key={i} style={{ textAlign: 'center' }}>
-                        {v ? <span style={{ color: 'var(--green)', fontSize: 16 }}>●</span> : <span style={{ opacity: .4 }}>—</span>}
+                        {v ? (
+                          <button type="button" onClick={() => onOpen?.(v.id)} title="فتح التقرير"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'inline-flex', flexDirection: 'column', alignItems: 'center', font: 'inherit' }}>
+                            <span style={{ color: 'var(--green)', fontSize: 16, lineHeight: 1 }}>●</span>
+                            {v.savedBy && <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap' }}>{v.savedBy}</span>}
+                          </button>
+                        ) : <span style={{ opacity: .4 }}>—</span>}
                       </td>
                     ))}
                     <td style={{ textAlign: 'center', fontWeight: x.count ? 800 : 400 }}>{x.count}</td>
@@ -935,6 +945,13 @@ function CaretakerReport() {
   const [selAxis,    setSelAxis]    = useState('')
   const [month,      setMonth]      = useState('')
   const [loadedPeriod, setLoadedPeriod] = useState(null) // الفترة والفلاتر التي حُمّلت بها النتائج
+  const [openId,     setOpenId]     = useState(null) // التقرير المفتوح من الجدول
+
+  // فتح تقرير من جدول التسليم: التمرير إليه وتمييزه
+  const openRecord = (id) => {
+    setOpenId(id)
+    setTimeout(() => document.getElementById(`qrec-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+  }
 
   const wingOptions = selMasanda ? MASANDAT.find(m => m.id === selMasanda)?.wings || [] : []
 
@@ -967,6 +984,7 @@ function CaretakerReport() {
       all.sort((a, b) => (b.from || '') > (a.from || '') ? 1 : -1)
       setRecords(all)
       setLoadedPeriod({ from, to, masanda: selMasanda, wing: selWing })
+      setOpenId(null)
       const fu = await fetchFollowups(all.map(r => r.id))
       setFollowups(fu)
     } catch (e) { toast('❌ ' + e.message, 'error') }
@@ -1089,7 +1107,7 @@ function CaretakerReport() {
       {loading && <div style={{ height: 200 }} className="skeleton" />}
 
       {!loading && loadedPeriod && (
-        <CaretakerDeliveryGrid records={records} period={loadedPeriod} />
+        <CaretakerDeliveryGrid records={records} period={loadedPeriod} onOpen={openRecord} />
       )}
 
       {!loading && records.length > 0 && (
@@ -1124,6 +1142,7 @@ function CaretakerReport() {
             ))}
           </div>
 
+          <div className="card-title" style={{ margin: '4px 0 10px' }}>📄 التقارير المسجلة ({records.length})</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {records.map(r => {
               const fu = followups[r.id] || {}
@@ -1132,7 +1151,8 @@ function CaretakerReport() {
                 : null
 
               return (
-                <div key={r.id} className="card">
+                <div key={r.id} id={`qrec-${r.id}`} className="card"
+                  style={openId === r.id ? { outline: '3px solid var(--accent)', outlineOffset: 2, transition: 'outline-color .3s' } : undefined}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ fontWeight: 800, fontSize: 14 }}>{getMasandaName(r.center)} — {getWingLabel(r.center)}</div>
