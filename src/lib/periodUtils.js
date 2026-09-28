@@ -22,7 +22,7 @@ export function daysBetween(from, to) {
   const d = parseISO(from)
   const end = parseISO(to)
   while (d <= end) {
-    out.push({ iso: toISO(d), day: d.getDate(), dow: DAR[d.getDay()] })
+    out.push({ iso: toISO(d), day: d.getDate(), dow: DAR[d.getDay()], weekend: d.getDay() === 5 || d.getDay() === 6 })
     d.setDate(d.getDate() + 1)
   }
   return out

@@ -857,10 +857,10 @@ function buildStaffDays(records, period) {
 }
 
 function printStaffDays({ days, rows }, period) {
-  const head = `<tr><th class="nm">م</th><th class="nm">اسم العامل</th>${days.map(d => `<th><div>${d.day}</div><div class="dw">${escHtml(d.dow.slice(0, 3))}</div></th>`).join('')}<th>المجموع</th></tr>`
-  const body = rows.map((r, i) => `<tr><td>${i + 1}</td><td class="nm">${escHtml(r.name)}</td>${r.marks.map(v => `<td>${v ? '<span class="dot">●</span>' : ''}</td>`).join('')}<td class="tot">${r.count}</td></tr>`).join('')
+  const head = `<tr><th class="nm">م</th><th class="nm">اسم العامل</th>${days.map(d => `<th${d.weekend ? ' class="we"' : ''}><div>${d.day}</div><div class="dw">${escHtml(d.dow.slice(0, 3))}</div></th>`).join('')}<th>المجموع</th></tr>`
+  const body = rows.map((r, i) => `<tr><td>${i + 1}</td><td class="nm">${escHtml(r.name)}</td>${r.marks.map((v, di) => `<td${days[di].weekend ? ' class="we"' : ''}>${v ? '<span class="dot">●</span>' : ''}</td>`).join('')}<td class="tot">${r.count}</td></tr>`).join('')
   const dayTotals = days.map((_, di) => rows.filter(r => r.marks[di]).length)
-  const foot = `<tr class="ft"><td colspan="2" class="nm">عدد المسجّلين</td>${dayTotals.map(n => `<td>${n || ''}</td>`).join('')}<td class="tot">${rows.reduce((s, r) => s + r.count, 0)}</td></tr>`
+  const foot = `<tr class="ft"><td colspan="2" class="nm">عدد المسجّلين</td>${dayTotals.map((n, di) => `<td${days[di].weekend ? ' class="we"' : ''}>${n || ''}</td>`).join('')}<td class="tot">${rows.reduce((s, r) => s + r.count, 0)}</td></tr>`
   const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>سجل تقارير مشرفي السكن</title><style>
     *{box-sizing:border-box}
     body{font-family:Tahoma,Arial,sans-serif;font-size:10px;color:#1e2a3a;margin:0;padding:10px;direction:rtl}
@@ -875,13 +875,15 @@ function printStaffDays({ days, rows }, period) {
     .dot{color:#1f6b45;font-size:12px}
     .tot{font-weight:700;background:#eef2f7}
     tr.ft td{font-weight:700;background:#eef2f7}
+    th.we{background:#8a6d1a;border-color:#a3842a}
+    td.we,tr:nth-child(even) td.we,tr.ft td.we{background:#fbf1d6}
     .legend{margin-top:8px;font-size:10px;color:#556}
     @media print{@page{size:A4 landscape;margin:7mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
   <h2>سجل تقارير مشرفي السكن — العامل × اليوم</h2>
   <p class="sub">الفترة: ${escHtml(period.from)} ← ${escHtml(period.to)} · عدد العاملين: ${rows.length}</p>
   <table><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>
-  <div class="legend">● تعني أن العامل سجّل تقريراً في ذلك اليوم.</div>
+  <div class="legend">● تعني أن العامل سجّل تقريراً في ذلك اليوم. الأعمدة المظللة: الجمعة والسبت.</div>
   <div class="legend">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</div>
   </body></html>`
   return openPrintWindow(html)
@@ -908,7 +910,7 @@ function StaffDaysGrid({ records, period }) {
             <tr>
               <th style={{ whiteSpace: 'nowrap' }}>اسم العامل</th>
               {days.map(d => (
-                <th key={d.iso} style={{ textAlign: 'center', padding: '6px 4px', minWidth: 26 }} title={`${d.dow} ${d.iso}`}>
+                <th key={d.iso} style={{ textAlign: 'center', padding: '6px 4px', minWidth: 26, ...(d.weekend ? { background: '#fbf1d6', color: '#8a6d1a' } : {}) }} title={`${d.dow} ${d.iso}`}>
                   {d.day}<div style={{ fontSize: 9, fontWeight: 400, opacity: .7 }}>{d.dow.slice(0, 3)}</div>
                 </th>
               ))}
@@ -920,7 +922,7 @@ function StaffDaysGrid({ records, period }) {
               <tr key={r.name}>
                 <td style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{r.name}</td>
                 {r.marks.map((v, i) => (
-                  <td key={i} style={{ textAlign: 'center', padding: '6px 2px' }}>
+                  <td key={i} style={{ textAlign: 'center', padding: '6px 2px', ...(days[i].weekend ? { background: '#fdf6e3' } : {}) }}>
                     {v && <span style={{ color: 'var(--green)', fontSize: 14 }}>●</span>}
                   </td>
                 ))}
