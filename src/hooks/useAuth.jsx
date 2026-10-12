@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react'
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, getIdToken } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
-import { auth, db } from '../lib/firebase'
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, getIdToken, auth } from '../lib/localAuth'
+import { doc, getDoc, db } from '../lib/localDb'
 
 const AuthContext = createContext(null)
 
@@ -14,11 +13,11 @@ export function AuthProvider({ children }) {
   const [loading,           setLoading]           = useState(true)
   const refreshTimerRef = useRef(null)
 
-  const fetchUserData = async (firebaseUser, retries = 3) => {
+  const fetchUserData = async (authUser, retries = 3) => {
     for (let i = 0; i < retries; i++) {
       try {
-        await getIdToken(firebaseUser, true)
-        const snap = await getDoc(doc(db, 'users', firebaseUser.uid))
+        await getIdToken(authUser, true)
+        const snap = await getDoc(doc(db, 'users', authUser.uid))
         if (snap.exists()) return snap.data()
         return null
       } catch (err) {
@@ -33,12 +32,12 @@ export function AuthProvider({ children }) {
     return 'error'
   }
 
-  const scheduleTokenRefresh = (firebaseUser) => {
+  const scheduleTokenRefresh = (authUser) => {
     if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
     refreshTimerRef.current = setInterval(async () => {
       try {
-        await getIdToken(firebaseUser, true)
-        const data = await fetchUserData(firebaseUser, 1)
+        await getIdToken(authUser, true)
+        const data = await fetchUserData(authUser, 1)
         if (data && data !== 'error') {
           setRole(data.role)
           setName(data.name)
@@ -52,9 +51,9 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const data = await fetchUserData(firebaseUser)
+    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      if (authUser) {
+        const data = await fetchUserData(authUser)
 
         if (data === null) {
           // المستخدم غير موجود في قاعدة البيانات
@@ -63,20 +62,20 @@ export function AuthProvider({ children }) {
           await signOut(auth)
         } else if (data === 'error') {
           // خطأ في الجلب — افتح الموقع بصلاحيات فارغة
-          setUser(firebaseUser)
+          setUser(authUser)
           setPermissions({})
           setPermissionsLoaded(true)
           setLoading(false)
-          scheduleTokenRefresh(firebaseUser)
+          scheduleTokenRefresh(authUser)
         } else {
           // نجاح — حدّث كل البيانات دفعة واحدة
-          setUser(firebaseUser)
+          setUser(authUser)
           setRole(data.role)
           setName(data.name)
           setPermissions(data.permissions || {})
           setPermissionsLoaded(true)
           setLoading(false)
-          scheduleTokenRefresh(firebaseUser)
+          scheduleTokenRefresh(authUser)
         }
       } else {
         // تسجيل خروج

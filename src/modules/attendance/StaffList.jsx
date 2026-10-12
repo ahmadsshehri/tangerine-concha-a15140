@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   collection, getDocs, doc, setDoc,
-  deleteDoc, query, orderBy
-} from 'firebase/firestore'
-import { db } from '../../lib/firebase'
+  deleteDoc, query, orderBy, db
+} from '../../lib/localDb'
 import { DEFAULT_JOB_TYPES, COLOR_MAP } from './attendanceConstants'
 
 function Badge({ label, color = 'gray' }) {

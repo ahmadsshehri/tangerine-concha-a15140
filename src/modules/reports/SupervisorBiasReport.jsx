@@ -2,8 +2,7 @@
 // تقرير مقارنة أداء المشرفين — للمدير فقط
 
 import { useState, useCallback } from 'react'
-import { collection, getDocs } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
+import { collection, getDocs, db } from '../../lib/localDb'
 import { useToast } from '../../components/Toast'
 import { MASANDAT, AXES } from '../../lib/constants'
 

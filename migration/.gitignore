@@ -1,0 +1,5 @@
+# مفاتيح وبيانات حساسة — لا ترفع إلى GitHub
+service-account.json
+*.json
+!package.json
+node_modules/

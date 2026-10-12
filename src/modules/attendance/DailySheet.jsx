@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  collection, getDocs, doc, setDoc, getDoc, query, orderBy
-} from 'firebase/firestore'
-import { db } from '../../lib/firebase'
+  collection, getDocs, doc, setDoc, getDoc, query, orderBy, db
+} from '../../lib/localDb'
 import {
   DEFAULT_STATUSES, DEFAULT_JOB_TYPES,
   LEAVE_TYPES, TASK_DURATION_TYPES,

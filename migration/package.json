@@ -1,0 +1,9 @@
+{
+  "name": "rehab-firebase-export",
+  "private": true,
+  "type": "module",
+  "description": "أداة تُستخدم مرة واحدة لتصدير البيانات من Firebase قبل النقل للخادم المحلي",
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

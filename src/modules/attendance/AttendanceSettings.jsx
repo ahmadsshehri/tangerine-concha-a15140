@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
+import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch, db } from '../../lib/localDb'
 import { DEFAULT_STATUSES, DEFAULT_JOB_TYPES, COLOR_MAP } from './attendanceConstants'
 
 const COLOR_OPTIONS = [

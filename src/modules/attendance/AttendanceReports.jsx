@@ -1,9 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  collection, getDocs, getDoc, doc, query, orderBy
-} from 'firebase/firestore'
-import { db } from '../../lib/firebase'
+  collection, getDocs, getDoc, doc, query, orderBy, db
+} from '../../lib/localDb'
 import * as XLSX from 'xlsx'
 import {
   DEFAULT_STATUSES, DEFAULT_JOB_TYPES,

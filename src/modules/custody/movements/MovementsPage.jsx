@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { collection, getDocs, doc, setDoc, getDoc } from 'firebase/firestore'
-import { db } from '../../../lib/firebase'
+import { collection, getDocs, doc, setDoc, getDoc, db } from '../../../lib/localDb'
 import { useAuth } from '../../../hooks/useAuth'
 import { useToast } from '../../../components/Toast'
 import { MASANDAT, MOVEMENT_TYPES, MOVEMENT_STATUSES } from '../../../lib/constants'

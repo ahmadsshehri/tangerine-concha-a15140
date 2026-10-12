@@ -1,0 +1,15 @@
+# /etc/systemd/system/rehab.service
+# sudo systemctl daemon-reload && sudo systemctl enable --now rehab
+[Unit]
+Description=Rehab Centers Management System
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/rehab-system
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning server/index.js
+Restart=always
+User=rehab
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
