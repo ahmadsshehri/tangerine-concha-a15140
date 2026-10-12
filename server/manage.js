@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import * as db from './db.js'
 import * as auth from './auth.js'
 import { backupNow } from './backup.js'
+import { config } from './config.js'
 
 const [cmd, ...args] = process.argv.slice(2)
 
@@ -46,6 +47,16 @@ switch (cmd) {
     }
     console.log(`\nالمجموع: ${rows.length}`)
     break
+  }
+
+  // تُستخدم من setup.bat
+  case 'port':
+    console.log(config.port)
+    break
+
+  case 'has-admin': {
+    const admins = db.listDocs('users', [{ field: 'role', op: '==', value: 'admin' }])
+    process.exit(admins.some(a => auth.findUserByUid(a.id)) ? 0 : 1)
   }
 
   case 'backup':

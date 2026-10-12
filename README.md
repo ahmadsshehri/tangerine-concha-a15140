@@ -71,8 +71,13 @@ npm run manage -- create-admin admin@center.local "كلمة-مرور-قوية" "
 
 ### 5. التشغيل
 
-**Windows Server:** شغّل `deploy\windows\install-service.bat` كمسؤول (Run as administrator).
-يسجّل النظام ليعمل تلقائياً مع تشغيل الخادم ويفتح المنفذ 8080 في جدار الحماية.
+**Windows Server (الأسهل):** حزمة جاهزة فيها كل المتطلبات بما فيها مثبّت Node.js:
+```bash
+bash deploy/package-windows.sh      # ينتج release/RehabSystem.zip
+```
+فك الضغط على الخادم إلى `D:\RehabSystem` ثم زر أيمن على `setup.bat` ← **Run as administrator**.
+المثبّت ينصّب Node.js عند الحاجة، ويجهّز البيانات، وينشئ حساب المدير، ويسجّل النظام ليعمل تلقائياً مع تشغيل الخادم، ويفتح المنفذ في جدار الحماية.
+التفاصيل في `deploy/windows/INSTALL-AR.txt`. وللإيقاف والإعادة: `deploy\windows\restart.bat` و`uninstall.bat`.
 
 **Linux:** انسخ المشروع إلى `/opt/rehab-system` ثم:
 ```bash
@@ -144,7 +149,7 @@ git pull
 npm install
 npm run build
 ```
-ثم أعد تشغيل الخدمة (`schtasks /End /TN RehabSystem` ثم `schtasks /Run /TN RehabSystem` في Windows، أو `sudo systemctl restart rehab` في Linux).
+ثم أعد تشغيل الخدمة (`deploy\windows\restart.bat` في Windows، أو `sudo systemctl restart rehab` في Linux).
 البيانات في `data/` لا تتأثر بالتحديث.
 
 ## 🧑‍💻 التطوير على جهازك

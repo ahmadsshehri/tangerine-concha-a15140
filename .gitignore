@@ -5,3 +5,5 @@ dist/
 .env.*.local
 data/
 server/.env
+
+release/
