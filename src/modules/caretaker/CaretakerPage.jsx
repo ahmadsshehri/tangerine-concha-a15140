@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  collection, getDocs, doc, setDoc, deleteDoc
-} from 'firebase/firestore'
-import { db } from '../../lib/firebase'
+  collection, getDocs, doc, setDoc, deleteDoc, db
+} from '../../lib/localDb'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
 import { MASANDAT, QA, QPROG, QDAYS } from '../../lib/constants'

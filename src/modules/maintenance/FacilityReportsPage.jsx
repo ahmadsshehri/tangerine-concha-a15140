@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { collection, getDocs, doc, setDoc } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
+import { collection, getDocs, doc, setDoc, db } from '../../lib/localDb'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
 import { MASANDAT, PRIORITY_LEVELS, FACILITY_REPORT_STATUSES, FAULT_TYPES } from '../../lib/constants'

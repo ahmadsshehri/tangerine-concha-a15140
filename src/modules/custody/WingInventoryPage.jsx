@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { collection, getDocs, doc, setDoc } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
+import { collection, getDocs, doc, setDoc, db } from '../../lib/localDb'
 import { useToast } from '../../components/Toast'
 import { MASANDAT } from '../../lib/constants'
 

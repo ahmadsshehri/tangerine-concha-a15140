@@ -2,9 +2,8 @@
 // تقرير مشرف السكن اليومي
 
 import { useState, useEffect, useCallback } from 'react'
-import { collection, getDocs, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore'
+import { collection, getDocs, doc, setDoc, deleteDoc, query, where, db } from '../../lib/localDb'
 import * as XLSX from 'xlsx'
-import { db } from '../../lib/firebase'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
 import { MASANDAT, TODAY } from '../../lib/constants'
@@ -1197,7 +1196,7 @@ function DailyReportTab() {
 
   // ─── CSS طباعة ─────────────────────────────────────────────────────────────
   const PRINT_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
+@import url('${window.location.origin}/fonts/cairo.css');
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Cairo',sans-serif;background:#fff;color:#1a2233;direction:rtl;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 

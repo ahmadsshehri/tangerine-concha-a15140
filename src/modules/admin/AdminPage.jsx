@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
-import { auth, db } from '../../lib/firebase'
+import { collection, getDocs, doc, setDoc, deleteDoc, db } from '../../lib/localDb'
+import { createUserWithEmailAndPassword, setUserPassword, auth } from '../../lib/localAuth'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../components/Toast'
 
@@ -183,6 +182,17 @@ export default function AdminPage() {
     } catch (e) { toast('❌ ' + e.message, 'error') }
   }
 
+  // ─ تعيين كلمة مرور جديدة (بديل "نسيت كلمة المرور" بعد النقل للخادم المحلي)
+  const resetPassword = async (user) => {
+    const pass = prompt(`كلمة المرور الجديدة لـ "${user.name}" (6 أحرف على الأقل):`)
+    if (pass === null) return
+    if (pass.length < 6) { toast('⚠️ كلمة المرور يجب أن تكون 6 أحرف على الأقل', 'warn'); return }
+    try {
+      await setUserPassword(user.id, pass)
+      toast('✅ تم تغيير كلمة المرور')
+    } catch (e) { toast('❌ ' + e.message, 'error') }
+  }
+
   // ─ تحويل مدير إلى مشرف
   const demoteAdmin = async (user) => {
     if (!isAdmin) { toast('❌ هذه الصلاحية للمديرين فقط', 'error'); return }
@@ -273,6 +283,9 @@ export default function AdminPage() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span className="role-badge role-admin">مدير — كل الصلاحيات</span>
+                    <button className="btn btn-outline btn-xs" onClick={() => resetPassword(u)} style={{ fontSize: 11 }}>
+                      🔒 كلمة المرور
+                    </button>
                     {!isMe && (
                       <>
                         <button
@@ -344,7 +357,12 @@ export default function AdminPage() {
                         </>
                       )}
                       {(isAdmin || hasPerm('can_create_supervisors')) && (
-                        <button className="btn btn-danger btn-xs" onClick={() => delUser(user)}>حذف</button>
+                        <>
+                          <button className="btn btn-outline btn-xs" onClick={() => resetPassword(user)} style={{ fontSize: 11 }}>
+                            🔒 كلمة المرور
+                          </button>
+                          <button className="btn btn-danger btn-xs" onClick={() => delUser(user)}>حذف</button>
+                        </>
                       )}
                     </div>
                   </div>

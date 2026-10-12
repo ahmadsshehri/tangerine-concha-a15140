@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore'
-import { db } from '../../../lib/firebase'
+import { collection, getDocs, doc, setDoc, deleteDoc, db } from '../../../lib/localDb'
 import { useAuth } from '../../../hooks/useAuth'
 import { useToast } from '../../../components/Toast'
 import { ITEM_CATEGORIES, ITEM_UNITS } from '../../../lib/constants'

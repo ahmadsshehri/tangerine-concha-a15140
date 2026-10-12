@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "node --disable-warning=ExperimentalWarning server/index.js",
     "build": "vite build",
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "manage": "node --disable-warning=ExperimentalWarning server/manage.js",
     "preview": "vite preview"
   },
   "dependencies": {
-    "firebase": "^10.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.24.1",
@@ -22,5 +24,8 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "vite": "^5.3.1"
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }
