@@ -30,5 +30,20 @@ fi
 (cd "$CACHE" && grep " ${MSI}\$" SHASUMS256.txt | sha256sum -c -)
 cp "$CACHE/$MSI" "$PKG/requirements/"
 
-(cd "$OUT" && zip -qr RehabSystem.zip RehabSystem)
+# ضغط بصيغة Windows الأصلية (بدون صلاحيات Linux) ليفتح بلا مشاكل في مستكشف الملفات
+python3 - "$OUT" <<'PY'
+import os, sys, zipfile
+out = sys.argv[1]
+with zipfile.ZipFile(os.path.join(out, 'RehabSystem.zip'), 'w', zipfile.ZIP_DEFLATED) as z:
+    for root, dirs, files in os.walk(os.path.join(out, 'RehabSystem')):
+        dirs.sort()
+        for f in sorted(files):
+            full = os.path.join(root, f)
+            info = zipfile.ZipInfo.from_file(full, os.path.relpath(full, out))
+            info.create_system = 0          # MS-DOS/Windows
+            info.external_attr = 0x20       # ملف عادي (Archive) بدون صلاحيات Unix
+            info.compress_type = zipfile.ZIP_DEFLATED
+            with open(full, 'rb') as fh:
+                z.writestr(info, fh.read())
+PY
 echo "✅ $OUT/RehabSystem.zip"
