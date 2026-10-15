@@ -1,0 +1,5 @@
+{
+  "redirects": [
+    { "source": "/((?!moved\\.html).*)", "destination": "/moved.html", "permanent": false }
+  ]
+}
